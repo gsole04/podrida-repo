@@ -475,9 +475,9 @@ function playerPosition(playerIdx, humanIdx, n) {
 
 // ══ Setup Screen ═══════════════════════════════════════════════════════════
 const BOT_TYPES = [
-  { id: 'random',    label: 'Aleatori',   desc: 'Juga a l\'atzar' },
-  { id: 'heuristic', label: 'Heurístic',  desc: 'Segueix regles bàsiques' },
-  { id: 'ismcts',    label: 'ISMCTS',     desc: 'Cerca per simulació · fort' },
+  { id: 'random',    label: 'Aleatori',   desc: 'Juga a l\'atzar - fàcil' },
+  { id: 'heuristic', label: 'Heurístic',  desc: 'Segueix regles bàsiques - mitjà' },
+  { id: 'ismcts',    label: 'ISMCTS',     desc: 'Cerca per simulació - difícil' },
 ];
 
 function SetupScreen({ onStart }) {
@@ -488,7 +488,7 @@ function SetupScreen({ onStart }) {
       <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "40px 48px", textAlign: "center", color: "white" }}>
         <div style={{ fontSize: 52, marginBottom: 6 }}>🃏</div>
         <h1 style={{ margin: "0 0 6px", fontSize: 36, letterSpacing: 3, color: "#c9a84c", fontFamily: "Georgia,serif" }}>LA PODRIDA</h1>
-        <p style={{ color: "#666", fontSize: 12, marginBottom: 32 }}>Joc tradicional de basses</p>
+        <p style={{ color: "#666", fontSize: 12, marginBottom: 32 }}>Joc tradicional de cartes</p>
 
         <p style={{ color: "#aaa", fontSize: 13, marginBottom: 10 }}>Jugadors totals</p>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 28 }}>
