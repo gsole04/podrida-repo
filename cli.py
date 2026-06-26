@@ -2,8 +2,8 @@
 
 import os
 import random
-from jugador import JugadorHuma, JugadorAleatori
-from motor import Partida, seqüencia_rondes
+from jugador import JugadorHuma, JugadorAleatori, JugadorHeurístic
+from motor import Partida
 
 
 # ─── Utilitats de pantalla ───────────────────────────────────────────────────
@@ -144,7 +144,7 @@ class PartidaCLI(Partida):
 
             # Resultat de la mà
             línia()
-            print(f"\n  Resultat de la mà:")
+            print("\n  Resultat de la mà:")
             for nom, carta in taula:
                 guanya = "  ★ GUANYA" if nom == millor_jugador.nom else ""
                 print(f"    {nom}: {carta}{guanya}")
@@ -190,6 +190,23 @@ class PartidaCLI(Partida):
 
 # ─── Entrada al programa ─────────────────────────────────────────────────────
 
+def _demana_int(missatge, mínim, màxim):
+    while True:
+        entrada = input(missatge).strip()
+        if entrada.isdigit() and mínim <= int(entrada) <= màxim:
+            return int(entrada)
+        print(f"  Ha de ser entre {mínim} i {màxim}.")
+
+
+def _crea_oponent(tipus, índex):
+    noms = {
+        "1": ("Aleatori", JugadorAleatori),
+        "2": ("Heurístic", JugadorHeurístic),
+    }
+    nom_base, Classe = noms[tipus]
+    return Classe(f"{nom_base}-{índex}")
+
+
 def main():
     netejar()
     capçalera("LA PODRIDA")
@@ -207,18 +224,25 @@ def main():
 
     nom = input("  El teu nom: ").strip() or "Tu"
 
+    n_jugadors = _demana_int("  Quants jugadors en total? (3-5): ", 3, 5)
+
+    print("""
+  Tipus d'oponents:
+    1 · Aleatori   (juga a l'atzar, per aprendre les regles)
+    2 · Heurístic  (segueix estratègies bàsiques, més difícil)
+""")
     while True:
-        entrada = input("  Quants jugadors en total? (3-5): ").strip()
-        if entrada.isdigit() and 3 <= int(entrada) <= 5:
-            n_jugadors = int(entrada)
+        tipus = input("  Quin tipus d'oponents vols? (1/2): ").strip()
+        if tipus in ("1", "2"):
             break
-        print("  Ha de ser entre 3 i 5.")
+        print("  Escull 1 o 2.")
 
     jugadors = [JugadorHuma(nom)]
     for i in range(1, n_jugadors):
-        jugadors.append(JugadorAleatori(f"Bot-{i}"))
+        jugadors.append(_crea_oponent(tipus, i))
 
     random.shuffle(jugadors)
+    línia()
     print(f"\n  Ordre de joc: {' → '.join(j.nom for j in jugadors)}")
     pausa("\n  [Prem Enter per començar!]")
 

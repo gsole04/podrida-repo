@@ -5,9 +5,9 @@ from normes import jugades_legals, supera
 
 
 def seqüencia_rondes(n_jugadors):
-    """[1,2,...,7] + [8]*4N + [7,6,...,1] -> total 14 + 4N rondes."""
+    """[1,2,...,7] + [8]*N + [7,6,...,1] -> total 14 + N rondes."""
     pujada = list(range(1, 8))
-    plat = [8] * (4 * n_jugadors)
+    plat = [8] * n_jugadors
     baixada = list(range(7, 0, -1))
     return pujada + plat + baixada
 
@@ -27,19 +27,13 @@ class Partida:
         for num_ronda, n_cartes in enumerate(self.rondes, start=1):
             if verbose:
                 print(f"\n===== Ronda {num_ronda}/{len(self.rondes)} ({n_cartes} carta/es) =====")
-            self._jugar_ronda(n_cartes, verbose)
+            self._jugar_ronda(n_cartes, num_ronda - 1, verbose)
             self._index_inicial = (self._index_inicial + 1) % self.n
         return self.puntuacions
 
-    def _jugar_ronda(self, n_cartes, verbose):
+    def _jugar_ronda(self, n_cartes, round_idx, verbose):
         baralla = barreja(construeix_baralla(self.n))
-
-        # Ordre de joc d'aquesta ronda: comença qui toca (rotació).
         ordre = self.jugadors[self._index_inicial:] + self.jugadors[:self._index_inicial]
-
-        # Repartiment en blocs: qui comença rep el seu bloc EL DARRER, de manera
-        # que si es reparteix tota la baralla (n_cartes == 8), la seva última
-        # carta és exactament l'última carta de la baralla barrejada.
         ordre_repartiment = ordre[1:] + ordre[:1]
         mans = {}
         for i, j in enumerate(ordre_repartiment):
@@ -49,27 +43,33 @@ class Partida:
         trumf = carta_trumf.pal
         if verbose:
             if n_cartes == 8:
-                print(f"Trumf: {trumf}  (carta pública a la mà de {ordre[0].nom}: {carta_trumf})")
+                print(f"Trumfo: {trumf}  (carta pública de {ordre[0].nom}: {carta_trumf})")
             else:
-                print(f"Trumf: {trumf}  (carta visible al munt: {carta_trumf})")
+                print(f"Trumfo: {trumf}  (carta visible: {carta_trumf})")
 
         # --- Fase de parlar ---
         cantades = {}
+        noms_ordre = [j.nom for j in ordre]
         for j in ordre:
             info = {
-                "n_cartes": n_cartes,
-                "ma": list(mans[j.nom]),
-                "trumf": trumf,
+                "n_cartes":       n_cartes,
+                "ma":             list(mans[j.nom]),
+                "trumf":          trumf,
                 "cantades_fetes": dict(cantades),
+                "noms_jugadors":  noms_ordre,
             }
             cantades[j.nom] = j.cantar(info)
             if verbose:
                 print(f"  {j.nom} canta {cantades[j.nom]}")
 
-        # --- Fase de joc: n_cartes mans ---
+        # --- Estat de ronda compartit entre mans ---
         mans_guanyades = {j.nom: 0 for j in self.jugadors}
+        cartes_jugades = []          # totes les cartes jugades en rondes anteriors
+        buits = {j.nom: set() for j in self.jugadors}  # {nom: {pals buits coneguts}}
+        noms_ordre = [j.nom for j in ordre]
+
         ordre_actual = ordre
-        for _ in range(n_cartes):
+        for num_ma in range(n_cartes):
             taula = []
             pal_obert = None
             millor_carta = None
@@ -78,16 +78,35 @@ class Partida:
             for j in ordre_actual:
                 llegals = jugades_legals(mans[j.nom], pal_obert, millor_carta, trumf)
                 info = {
-                    "n_cartes": n_cartes,
-                    "ma": list(mans[j.nom]),
-                    "trumf": trumf,
-                    "taula": list(taula),
+                    # Camps bàsics (compatibles amb HeuristicPlayer)
+                    "n_cartes":        n_cartes,
+                    "ma":              list(mans[j.nom]),
+                    "trumf":           trumf,
+                    "taula":           list(taula),
+                    "cantada":         cantades[j.nom],
+                    "mans_guanyades":  mans_guanyades[j.nom],
+                    "mans_restants":   n_cartes - num_ma,
+                    # Camps addicionals per a agents avançats (ISMCTS, RL)
+                    "cantades_tots":        dict(cantades),
+                    "mans_guanyades_tots":  dict(mans_guanyades),
+                    "cartes_jugades":       list(cartes_jugades),
+                    "mides_ma":             {j2.nom: len(mans[j2.nom]) for j2 in self.jugadors},
+                    "ordre_actual":         [j2.nom for j2 in ordre_actual],
+                    "noms_jugadors":        noms_ordre,
+                    "buits":                {nom: set(s) for nom, s in buits.items()},
+                    "round_idx":            round_idx,
+                    "total_rounds":         len(self.rondes),
+                    "scores":               dict(self.puntuacions),
                 }
                 carta = j.jugar(info, llegals)
                 if carta not in mans[j.nom]:
                     raise ValueError(f"{j.nom} ha jugat una carta que no té: {carta}")
                 mans[j.nom].remove(carta)
                 taula.append((j.nom, carta))
+
+                # Actualitzar buits: si no segueix el pal obert, és buit en aquell pal
+                if pal_obert and carta.pal != pal_obert:
+                    buits[j.nom].add(pal_obert)
 
                 if pal_obert is None:
                     pal_obert = carta.pal
@@ -96,6 +115,8 @@ class Partida:
                     millor_jugador = j
 
             mans_guanyades[millor_jugador.nom] += 1
+            cartes_jugades.extend(c for _, c in taula)
+
             if verbose:
                 print(f"  Mà: {taula} -> guanya {millor_jugador.nom}")
 
@@ -106,10 +127,7 @@ class Partida:
         for j in self.jugadors:
             cantada = cantades[j.nom]
             fetes = mans_guanyades[j.nom]
-            if cantada == fetes:
-                punts = 10 + 3 * fetes
-            else:
-                punts = -3 * abs(cantada - fetes)
+            punts = (10 + 3 * fetes) if cantada == fetes else -3 * abs(cantada - fetes)
             self.puntuacions[j.nom] += punts
             if verbose:
                 print(f"  {j.nom}: cantava {cantada}, ha fet {fetes} -> {punts:+d} (total {self.puntuacions[j.nom]})")
