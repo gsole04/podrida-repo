@@ -935,7 +935,6 @@ function GameScreen({ game, setGame, onRestart }) {
           }}>
             <div style={{ fontSize: 56, lineHeight: 1.2 }}>🪶</div>
             <div style={{ color: "#c9a84c", fontSize: 16, fontFamily: "Georgia,serif", marginTop: 8, letterSpacing: 1 }}>Ronda Índia</div>
-            <div style={{ color: "#666", fontSize: 11, marginTop: 4 }}>Veus les cartes dels altres però no les teves</div>
           </div>
         </div>
       )}
