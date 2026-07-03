@@ -286,6 +286,94 @@ function mcBidJS(game, playerIdx, nSims = 150) {
   return bestBid;
 }
 
+
+// ══ Inferència RL (MLP en JavaScript pur) ════════════════════════════════════
+// Els pesos es carreguen des de pesos_rl.json exportat amb agents/exporta_pesos.py
+
+function matVecMul(W, b, x) {
+  // W: [out, in], b: [out], x: [in] → [out]
+  return W.map((row, i) => row.reduce((s, w, j) => s + w * x[j], 0) + b[i]);
+}
+
+function rlInfereix(obs, pesos, mask) {
+  // Forward pass: 161 → 256 → 256 → 128 → 40 (Tanh entre capes)
+  let h = matVecMul(pesos.l1_w, pesos.l1_b, obs).map(Math.tanh);
+  h     = matVecMul(pesos.l2_w, pesos.l2_b, h).map(Math.tanh);
+  h     = matVecMul(pesos.l3_w, pesos.l3_b, h).map(Math.tanh);
+  const logits = matVecMul(pesos.out_w, pesos.out_b, h);
+  // Apliquem la màscara i triem el millor
+  let best = -1, bestVal = -Infinity;
+  logits.forEach((v, i) => {
+    if (mask[i] && v > bestVal) { bestVal = v; best = i; }
+  });
+  return best;
+}
+
+// Estat global dels pesos RL (null fins que l'usuari els carrega)
+let RL_PESOS = null;
+
+
+// Observació simplificada per al bot RL al React
+// (equivalent a agents/observacio.py però en JS)
+const ORDRE_FORÇA_RL = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
+const PALS_RL = ["Ors", "Copes", "Espases", "Bastos"];
+
+function forçaIdx(carta) {
+  return PALS_RL.indexOf(carta.pal) * 10 + ORDRE_FORÇA_RL.indexOf(carta.valor);
+}
+
+function construeixObsRL(state, pi) {
+  const { hands, trump, trick, bids, taken, rounds, roundIdx, scores,
+          trickLeader, players, cartesJugades = [], buits = {} } = state;
+  const n = players.length;
+  const nC = rounds[roundIdx];
+  const nR = rounds.length;
+  const prog = roundIdx / Math.max(nR - 1, 1);
+  const nCf  = nC || 1;
+  const obs  = new Float32Array(40 + 40 + 40 + 4 + 4 + 2 + 3 + 3 + 7*(n-1) + n).fill(0);
+  let off = 0;
+
+  // A: mà pròpia
+  (hands[pi] || []).forEach(c => { obs[off + forçaIdx(c)] = 1; }); off += 40;
+  // B: cartes jugades
+  (cartesJugades || []).forEach(c => { obs[off + forçaIdx(c)] = 1; }); off += 40;
+  // C: taula actual
+  trick.forEach(({ carta }) => { obs[off + forçaIdx(carta)] = 1; }); off += 40;
+  // D: pal obert
+  if (trick.length) obs[off + PALS_RL.indexOf(trick[0].carta.pal)] = 1; off += 4;
+  // E: trumfo
+  obs[off + PALS_RL.indexOf(trump)] = 1; off += 4;
+  // F: progrés
+  obs[off] = prog; obs[off+1] = nC / 8; off += 2;
+  // G: fase
+  obs[off + (nC < 8 ? (roundIdx < 7 ? 0 : 2) : 1)] = 1; off += 3;
+  // H: info pròpia
+  obs[off]   = (bids[pi] ?? 0) / nCf;
+  obs[off+1] = (taken[pi] ?? 0) / nCf;
+  obs[off+2] = Math.max(0, nC - trick.length) / nCf; off += 3;
+  // I: oponents en ordre relatiu
+  const ordreAct = Array.from({length: n}, (_, k) => (trickLeader + k) % n);
+  const piPos    = ordreAct.indexOf(pi);
+  for (let k = 1; k < n; k++) {
+    const op  = ordreAct[(piPos + k) % n];
+    const bop = buits[op] || {};
+    obs[off]   = (bids[op] ?? 0) / nCf;
+    obs[off+1] = (taken[op] ?? 0) / nCf;
+    obs[off+2] = ((hands[op] || []).length) / nCf;
+    PALS_RL.forEach((p, i) => { obs[off + 3 + i] = bop[p] ? 1 : 0; });
+    off += 7;
+  }
+  // J: scores ponderats
+  const pes  = prog * prog;
+  const sc   = scores || {};
+  obs[off++] = (sc[pi] ?? 0) / 200 * pes;
+  for (let k = 1; k < n; k++) {
+    const op = ordreAct[(piPos + k) % n];
+    obs[off++] = ((sc[op] ?? 0) - (sc[pi] ?? 0)) / 200 * pes;
+  }
+  return Array.from(obs);
+}
+
 // ══ State Transitions ═════════════════════════════════════════════════════
 function setupRound(state) {
   const { players, rounds, roundIdx, startIdx } = state;
@@ -317,6 +405,7 @@ function setupRound(state) {
     _nextPhase: null,
     buits: {},
     cartesJugades: [],
+    rules: state.rules || {},
   };
 }
 
@@ -475,57 +564,106 @@ function playerPosition(playerIdx, humanIdx, n) {
 
 // ══ Setup Screen ═══════════════════════════════════════════════════════════
 const BOT_TYPES = [
-  { id: 'random',    label: 'Aleatori',   desc: 'Juga a l\'atzar - fàcil' },
-  { id: 'heuristic', label: 'Heurístic',  desc: 'Segueix regles bàsiques - mitjà' },
-  { id: 'ismcts',    label: 'ISMCTS',     desc: 'Cerca per simulació - difícil' },
+  { id: 'random',    label: 'Aleatori',  diff: 'Fàcil',   desc: "Juga a l'atzar" },
+  { id: 'heuristic', label: 'Heurístic', diff: 'Mitjà',   desc: 'Segueix regles bàsiques' },
+  { id: 'ismcts',    label: 'ISMCTS',    diff: 'Difícil', desc: 'Cerca per simulació' },
 ];
+
+function Toggle({ value, onChange, label, desc }) {
+  return (
+    <div onClick={() => onChange(!value)} style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+      borderRadius: 10, cursor: "pointer",
+      border: `1px solid ${value ? "#c9a84c" : "#2a2a2a"}`,
+      background: value ? "rgba(201,168,76,0.08)" : "transparent",
+      transition: "all 0.15s",
+    }}>
+      <div style={{
+        width: 34, height: 20, borderRadius: 10, position: "relative",
+        background: value ? "#c9a84c" : "#333", transition: "background 0.2s", flexShrink: 0,
+      }}>
+        <div style={{
+          position: "absolute", top: 2, left: value ? 16 : 2,
+          width: 16, height: 16, borderRadius: 8,
+          background: "white", transition: "left 0.2s",
+        }} />
+      </div>
+      <div style={{ textAlign: "left" }}>
+        <div style={{ color: value ? "#c9a84c" : "#888", fontSize: 13, fontWeight: "bold" }}>{label}</div>
+        <div style={{ color: "#555", fontSize: 11 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
 
 function SetupScreen({ onStart }) {
   const [n, setN] = useState(4);
   const [botType, setBotType] = useState('heuristic');
-  return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "40px 48px", textAlign: "center", color: "white" }}>
-        <div style={{ fontSize: 52, marginBottom: 6 }}>🃏</div>
-        <h1 style={{ margin: "0 0 6px", fontSize: 36, letterSpacing: 3, color: "#c9a84c", fontFamily: "Georgia,serif" }}>LA PODRIDA</h1>
-        <p style={{ color: "#666", fontSize: 12, marginBottom: 32 }}>Joc tradicional de cartes</p>
+  const [prohibitQuadrar, setProhibitQuadrar] = useState(false);
+  const [rondesIndia, setRondesIndia] = useState(false);
 
-        <p style={{ color: "#aaa", fontSize: 13, marginBottom: 10 }}>Jugadors totals</p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 28 }}>
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
+      <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "32px 40px", textAlign: "center", color: "white", width: "min(360px, 90vw)" }}>
+        <div style={{ fontSize: 48, marginBottom: 4 }}>🃏</div>
+        <h1 style={{ margin: "0 0 4px", fontSize: 32, letterSpacing: 3, color: "#c9a84c", fontFamily: "Georgia,serif" }}>LA PODRIDA</h1>
+        <p style={{ color: "#555", fontSize: 12, marginBottom: 28 }}>Joc tradicional de cartes</p>
+
+        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Jugadors totals</p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 24 }}>
           {[3, 4, 5].map(v => (
             <button key={v} onClick={() => setN(v)} style={{
-              width: 56, height: 56, borderRadius: 12,
+              width: 52, height: 52, borderRadius: 12,
               border: `2px solid ${n === v ? "#c9a84c" : "#333"}`,
               background: n === v ? "rgba(201,168,76,0.15)" : "transparent",
               color: n === v ? "#c9a84c" : "#555",
-              fontSize: 24, cursor: "pointer", fontFamily: "Georgia,serif",
-              transition: "all 0.15s",
+              fontSize: 22, cursor: "pointer", fontFamily: "Georgia,serif",
             }}>{v}</button>
           ))}
         </div>
 
-        <p style={{ color: "#aaa", fontSize: 13, marginBottom: 10 }}>Dificultat dels bots</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 28 }}>
+        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Dificultat dels bots</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
           {BOT_TYPES.map(bt => (
             <button key={bt.id} onClick={() => setBotType(bt.id)} style={{
-              padding: "10px 16px", borderRadius: 10,
-              border: `1px solid ${botType === bt.id ? "#c9a84c" : "#333"}`,
+              padding: "9px 14px", borderRadius: 10,
+              border: `1px solid ${botType === bt.id ? "#c9a84c" : "#2a2a2a"}`,
               background: botType === bt.id ? "rgba(201,168,76,0.12)" : "transparent",
-              color: "white", cursor: "pointer", textAlign: "left",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
+              color: "white", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
             }}>
-              <span style={{ color: botType === bt.id ? "#c9a84c" : "#ccc", fontWeight: "bold", fontSize: 14 }}>{bt.label}</span>
-              <span style={{ color: "#555", fontSize: 12 }}>{bt.desc}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ color: botType === bt.id ? "#c9a84c" : "#ccc", fontWeight: "bold", fontSize: 14 }}>{bt.label}</span>
+                <span style={{
+                  fontSize: 10, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap",
+                  background: bt.diff === 'Fàcil' ? "rgba(76,175,80,0.2)" : bt.diff === 'Mitjà' ? "rgba(255,152,0,0.2)" : "rgba(239,83,80,0.2)",
+                  color: bt.diff === 'Fàcil' ? "#81C784" : bt.diff === 'Mitjà' ? "#FFB74D" : "#EF9A9A",
+                }}>{bt.diff}</span>
+              </div>
+              <span style={{ color: "#555", fontSize: 11, textAlign: "right" }}>{bt.desc}</span>
             </button>
           ))}
         </div>
 
-        <button onClick={() => onStart(n, botType)} style={{
-          width: "100%", padding: "14px 0", borderRadius: 12,
+        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Regles especials</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 24 }}>
+          <Toggle
+            value={prohibitQuadrar} onChange={setProhibitQuadrar}
+            label="Prohibit quadrar"
+            desc="L'últim en parlar no pot igualar el total de mans"
+          />
+          <Toggle
+            value={rondesIndia} onChange={setRondesIndia}
+            label="Última ronda índia"
+            desc="En l'última ronda veus les cartes dels altres però no la teva"
+          />
+        </div>
+
+        <button onClick={() => onStart(n, botType, { prohibitQuadrar, rondesIndia })} style={{
+          width: "100%", padding: "13px 0", borderRadius: 12,
           border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
-          color: "#c9a84c", fontSize: 18, cursor: "pointer",
+          color: "#c9a84c", fontSize: 17, cursor: "pointer",
           fontFamily: "Georgia,serif", letterSpacing: 2,
-          transition: "background 0.2s",
         }}>Jugar</button>
       </div>
     </div>
@@ -570,7 +708,8 @@ function RoundEndOverlay({ game, onNext }) {
 
 // ══ Game Screen ════════════════════════════════════════════════════════════
 function GameScreen({ game, setGame, onRestart }) {
-  const { players, scores, phase, trump, trumpCard, bids, taken, trick, rounds, roundIdx, hands, curBidder, curPlayer, selected, trickWinner, startIdx } = game;
+  const { players, scores, phase, trump, trumpCard, bids, taken, trick, rounds, roundIdx, hands, curBidder, curPlayer, selected, trickWinner, startIdx, rules = {} } = game;
+  const isRondaIndia = rules.rondesIndia && roundIdx === rounds.length - 1;
   const n = players.length;
   const nC = rounds[roundIdx];
   const humanIdx = players.findIndex(p => p.isHuman);
@@ -583,6 +722,18 @@ function GameScreen({ game, setGame, onRestart }) {
     ? jugadesLegals(humanHand, palObert, millorT, trump)
     : [];
   const legalKeys = new Set(llegals.map(cardKey));
+
+  // Animació ronda índia
+  const [indiaAnim, setIndiaAnim] = useState({ vis: false, op: 0 });
+  useEffect(() => {
+    if (isRondaIndia) {
+      setIndiaAnim({ vis: true, op: 0 });
+      const t1 = setTimeout(() => setIndiaAnim({ vis: true, op: 1 }), 50);
+      const t2 = setTimeout(() => setIndiaAnim({ vis: true, op: 0 }), 2200);
+      const t3 = setTimeout(() => setIndiaAnim({ vis: false, op: 0 }), 2700);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    }
+  }, [roundIdx]);
 
   const handleCardClick = carta => {
     if (phase !== PHASE.PLAY || curPlayer !== humanIdx) return;
@@ -661,7 +812,12 @@ function GameScreen({ game, setGame, onRestart }) {
                 {phase === PHASE.BID && curBidder === op.idx && " 🤔"}
                 {phase === PHASE.PLAY && curPlayer === op.idx && " ▶"}
               </div>
-              <StackedHand count={opHand.length} />
+              {isRondaIndia
+                ? <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center", maxWidth: 160 }}>
+                    {opHand.map((c, ci) => <CardFront key={ci} carta={c} disabled size="sm" />)}
+                  </div>
+                : <StackedHand count={opHand.length} />
+              }
             </div>
           );
         })}
@@ -692,23 +848,38 @@ function GameScreen({ game, setGame, onRestart }) {
       {/* Human hand + bidding */}
       <div style={{ background: "rgba(0,0,0,0.35)", borderTop: "1px solid rgba(255,255,255,0.06)", padding: "10px 10px 16px" }}>
         {/* Bid buttons */}
-        {isHumanBidding && (
-          <div style={{ textAlign: "center", marginBottom: 12 }}>
-            <div style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>
-              Quantes mans cantes? <span style={{ color: "#555" }}>({nC} cartes)</span>
+        {isHumanBidding && (() => {
+          const bidOrder = Array.from({length: n}, (_, i) => (startIdx + i) % n);
+          const isLastBidder = bidOrder[bidOrder.length - 1] === humanIdx;
+          const sumJaCantat = Object.values(bids).reduce((a, b) => a + b, 0);
+          const prohibit = rules.prohibitQuadrar && isLastBidder ? (nC - sumJaCantat) : -1;
+          return (
+            <div style={{ textAlign: "center", marginBottom: 12 }}>
+              <div style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>
+                Quantes mans cantes? <span style={{ color: "#555" }}>({nC} cartes)</span>
+                {prohibit >= 0 && prohibit <= nC && (
+                  <span style={{ color: "#ef5350", marginLeft: 6 }}>· Prohibit quadrar</span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                {Array.from({length: nC + 1}, (_, i) => {
+                  const forbidden = i === prohibit;
+                  return (
+                    <button key={i} onClick={() => !forbidden && handleBid(i)} style={{
+                      width: 40, height: 40, borderRadius: 8,
+                      border: `1px solid ${forbidden ? "#555" : "#c9a84c"}`,
+                      background: forbidden ? "rgba(80,80,80,0.1)" : "rgba(201,168,76,0.08)",
+                      color: forbidden ? "#555" : "#c9a84c",
+                      fontSize: 18, cursor: forbidden ? "not-allowed" : "pointer",
+                      fontFamily: "Georgia,serif", fontWeight: "bold",
+                      textDecoration: forbidden ? "line-through" : "none",
+                    }}>{i}</button>
+                  );
+                })}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
-              {Array.from({length: nC + 1}, (_, i) => (
-                <button key={i} onClick={() => handleBid(i)} style={{
-                  width: 40, height: 40, borderRadius: 8,
-                  border: "1px solid #c9a84c", background: "rgba(201,168,76,0.08)",
-                  color: "#c9a84c", fontSize: 18, cursor: "pointer",
-                  fontFamily: "Georgia,serif", fontWeight: "bold",
-                }}>{i}</button>
-              ))}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Play hint */}
         {isHumanTurn && (
@@ -722,6 +893,22 @@ function GameScreen({ game, setGame, onRestart }) {
           {humanHand.map((carta, i) => {
             const isLegal = legalKeys.has(cardKey(carta));
             const isSel = cardsEq(selected, carta);
+            if (isRondaIndia) {
+              return (
+                <div key={i} onClick={() => isHumanTurn && handleCardClick(carta)}
+                  style={{ position: "relative", cursor: isHumanTurn ? "pointer" : "default" }}>
+                  <CardBack />
+                  {isHumanTurn && isLegal && (
+                    <div style={{
+                      position: "absolute", inset: 0, borderRadius: 7,
+                      border: `2px solid ${isSel ? "#F9A825" : "#c9a84c"}`,
+                      boxShadow: `0 0 10px ${isSel ? "#F9A825" : "#c9a84c"}66`,
+                      pointerEvents: "none",
+                    }} />
+                  )}
+                </div>
+              );
+            }
             return (
               <CardFront key={i} carta={carta} selected={isSel}
                 disabled={!isHumanTurn || !isLegal}
@@ -730,6 +917,28 @@ function GameScreen({ game, setGame, onRestart }) {
           })}
         </div>
       </div>
+
+      {/* Animació ronda índia */}
+      {indiaAnim.vis && (
+        <div style={{
+          position: "fixed", inset: 0, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", zIndex: 40,
+          pointerEvents: "none",
+          opacity: indiaAnim.op, transition: "opacity 0.4s ease",
+        }}>
+          <div style={{
+            background: "rgba(0,0,0,0.75)", borderRadius: 24,
+            padding: "24px 36px", textAlign: "center",
+            border: "1px solid #c9a84c44",
+            transform: `scale(${indiaAnim.op === 1 ? 1 : 0.8})`,
+            transition: "opacity 0.4s ease, transform 0.4s ease",
+          }}>
+            <div style={{ fontSize: 56, lineHeight: 1.2 }}>🪶</div>
+            <div style={{ color: "#c9a84c", fontSize: 16, fontFamily: "Georgia,serif", marginTop: 8, letterSpacing: 1 }}>Ronda Índia</div>
+            <div style={{ color: "#666", fontSize: 11, marginTop: 4 }}>Veus les cartes dels altres però no les teves</div>
+          </div>
+        </div>
+      )}
 
       {/* Overlays */}
       {(phase === PHASE.ROUND_END || phase === PHASE.GAME_END) && (
@@ -760,9 +969,17 @@ export default function App() {
       const isISMCTS = players[curBidder].botType === 'ismcts';
       setTimeout(() => {
         setGame(g => {
-          const bid = isISMCTS
+          const { rounds, roundIdx, bids: curBids, rules: r = {} } = g;
+          const nC = rounds[roundIdx];
+          const bidOrder = Array.from({length: g.players.length}, (_, i) => (g.startIdx + i) % g.players.length);
+          const isLast = bidOrder[bidOrder.length - 1] === g.curBidder;
+          const sumJa = Object.values(curBids).reduce((a, b) => a + b, 0);
+          const prohibit = r.prohibitQuadrar && isLast ? (nC - sumJa) : -1;
+          let bid = isISMCTS
             ? mcBidJS(g, g.curBidder, 120)
-            : hCant(g.hands[g.curBidder], g.trump, g.rounds[g.roundIdx]);
+            : hCant(g.hands[g.curBidder], g.trump, nC);
+          if (bid === prohibit) bid = prohibit > 0 ? prohibit - 1 : prohibit + 1;
+          bid = Math.max(0, Math.min(bid, nC));
           return doBid(g, bid);
         });
         setBusy(false);
@@ -796,7 +1013,7 @@ export default function App() {
     }
   }, [game?.phase, game?.curBidder, game?.curPlayer, game?.trickWinner, busy]);
 
-  const handleStart = (n, botType) => {
+  const handleStart = (n, botType, rules = {}) => {
     const players = [
       { name: "Tu", isHuman: true, botType: null },
       ...Array.from({length: n - 1}, (_, i) => ({ name: `Bot ${i + 1}`, isHuman: false, botType })),
@@ -807,6 +1024,7 @@ export default function App() {
       rounds: seqRondes(n),
       roundIdx: 0,
       startIdx: Math.floor(Math.random() * n),
+      rules,
     }));
   };
 
