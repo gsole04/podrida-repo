@@ -710,8 +710,8 @@ function TutorialOverlay({ step, onTap }) {
     <div onClick={onTap} style={{
       position:'fixed', inset:0, zIndex:60,
       display:'flex', flexDirection:'column',
-      alignItems:'center', justifyContent:'flex-end',
-      paddingBottom:150, cursor:'pointer',
+      alignItems:'center', justifyContent:'center',
+      padding:'0 16px', cursor:'pointer',
     }}>
       <div style={{
         maxWidth:400, width:'90%',
