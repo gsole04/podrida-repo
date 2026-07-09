@@ -658,7 +658,201 @@ function CardBack({ size = "md" }) {
       flexShrink: 0,
     }} />
   );
-    }
+}
+
+// ══ Opponent Layout ════════════════════════════════════════════════════════
+// Posició visual basada en passos en l'ordre de joc respecte al humà.
+// steps=1 → juga just després del humà → DRETA (sentit horari)
+// steps=2 → DALT, steps=3 → ESQUERRA, steps=4 → DALT-ESQUERRA (per n=5)
+function playerPosition(playerIdx, humanIdx, n) {
+  const steps = (playerIdx - humanIdx + n) % n;
+  const pos = {
+    3: {
+      1: { top: 16, right: "18%", transform: "translateX(50%)" },
+      2: { top: 16, left: "18%", transform: "translateX(-50%)" },
+    },
+    4: {
+      1: { top: "36%", right: 8, transform: "translateY(-50%)" },
+      2: { top: 10, left: "50%", transform: "translateX(-50%)" },
+      3: { top: "36%", left: 8, transform: "translateY(-50%)" },
+    },
+    5: {
+      1: { top: "36%", right: 8, transform: "translateY(-50%)" },
+      2: { top: 10, right: "20%", transform: "translateX(50%)" },
+      3: { top: 10, left: "20%", transform: "translateX(-50%)" },
+      4: { top: "36%", left: 8, transform: "translateY(-50%)" },
+    },
+  };
+  return (pos[n] || pos[4])[steps] || { top: 0, left: "50%" };
+}
+
+// ══ Setup Screen ═══════════════════════════════════════════════════════════
+const BOT_TYPES = [
+  { id: 'random',    label: 'Aleatori',  diff: 'Fàcil',   desc: "Juga a l'atzar" },
+  { id: 'heuristic', label: 'Heurístic', diff: 'Mitjà',   desc: 'Segueix regles bàsiques' },
+  { id: 'ismcts',    label: 'ISMCTS',    diff: 'Difícil', desc: 'Cerca per simulació' },
+];
+
+// ── Tutorial UI ─────────────────────────────────────────────────────────────
+function CardOrderDisplay() {
+  return (
+    <div style={{ display:'flex', gap:3, justifyContent:'center', flexWrap:'wrap', marginBottom:12 }}>
+      {ORDRE_FORÇA.map(v => (
+        <CardFront key={v} carta={{pal:'Ors',valor:v}} disabled size="sm" />
+      ))}
+    </div>
+  );
+}
+
+function TutorialOverlay({ step, onTap }) {
+  if (!step) return null;
+  return (
+    <div onClick={onTap} style={{
+      position:'fixed', inset:0, zIndex:60,
+      display:'flex', flexDirection:'column',
+      alignItems:'center', justifyContent:'flex-end',
+      paddingBottom:150, cursor:'pointer',
+    }}>
+      <div style={{
+        maxWidth:400, width:'90%',
+        background:'rgba(5,12,5,0.97)',
+        borderRadius:18, border:'1px solid #c9a84c88',
+        padding:'18px 22px',
+        boxShadow:'0 8px 32px rgba(0,0,0,0.7)',
+      }}>
+        {step.showOrder && <CardOrderDisplay />}
+        {step.title && (
+          <p style={{
+            color:'#FFD700', fontSize:19, fontWeight:800, margin:'0 0 8px',
+            fontFamily:'Georgia,serif', letterSpacing:1,
+            textShadow:'0 0 12px #FFD70055',
+          }}>{step.title}</p>
+        )}
+        <p style={{ color:'#f0f0f0', fontSize:14, lineHeight:1.7, margin:0 }}>
+          {step.text}
+        </p>
+        <div style={{ color:'#c9a84c', fontSize:11, textAlign:'right', marginTop:10, opacity:0.8 }}>
+          Toca per continuar →
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ value, onChange, label, desc }) {
+  return (
+    <div onClick={() => onChange(!value)} style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+      borderRadius: 10, cursor: "pointer",
+      border: `1px solid ${value ? "#c9a84c" : "#2a2a2a"}`,
+      background: value ? "rgba(201,168,76,0.08)" : "transparent",
+      transition: "all 0.15s",
+    }}>
+      <div style={{
+        width: 34, height: 20, borderRadius: 10, position: "relative",
+        background: value ? "#c9a84c" : "#333", transition: "background 0.2s", flexShrink: 0,
+      }}>
+        <div style={{
+          position: "absolute", top: 2, left: value ? 16 : 2,
+          width: 16, height: 16, borderRadius: 8,
+          background: "white", transition: "left 0.2s",
+        }} />
+      </div>
+      <div style={{ textAlign: "left" }}>
+        <div style={{ color: value ? "#c9a84c" : "#888", fontSize: 13, fontWeight: "bold" }}>{label}</div>
+        <div style={{ color: "#555", fontSize: 11 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function MenuScreen({ onPlay, onTutorial }) {
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
+      <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "36px 40px", textAlign: "center", color: "white", width: "min(360px, 90vw)" }}>
+        <div style={{ fontSize: 56, marginBottom: 4 }}>🃏</div>
+        <h1 style={{ margin: "0 0 4px", fontSize: 34, letterSpacing: 3, color: "#c9a84c", fontFamily: "Georgia,serif" }}>LA PODRIDA</h1>
+        <p style={{ color: "#555", fontSize: 12, marginBottom: 36 }}>Joc tradicional de cartes</p>
+
+        <button onClick={onPlay} style={{
+          width: "100%", padding: "16px 0", borderRadius: 12,
+          border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+          color: "#c9a84c", fontSize: 19, cursor: "pointer",
+          fontFamily: "Georgia,serif", letterSpacing: 2,
+        }}>▶ Juga</button>
+
+        <button onClick={onTutorial} style={{
+          width: "100%", padding: "14px 0", borderRadius: 12, marginTop: 12,
+          border: "1px solid #2a5a3a", background: "transparent",
+          color: "#4a9a5a", fontSize: 16, cursor: "pointer",
+          fontFamily: "Georgia,serif", letterSpacing: 1,
+        }}>📖 Aprèn a jugar</button>
+      </div>
+    </div>
+  );
+}
+
+function SetupScreen({ onStart, onBack }) {
+  const [n, setN] = useState(4);
+  const [botType, setBotType] = useState('heuristic');
+  const [prohibitQuadrar, setProhibitQuadrar] = useState(false);
+  const [rondesIndia, setRondesIndia] = useState(false);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
+      <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "32px 40px", textAlign: "center", color: "white", width: "min(360px, 90vw)" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
+          <button onClick={onBack} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#666", cursor: "pointer", fontSize: 12 }}>← Enrere</button>
+          <span style={{ flex: 1, color: "#aaa", fontSize: 14, fontFamily: "Georgia,serif", letterSpacing: 1 }}>Configura la partida</span>
+        </div>
+
+        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Jugadors totals</p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 24 }}>
+          {[3, 4, 5].map(v => (
+            <button key={v} onClick={() => setN(v)} style={{
+              width: 52, height: 52, borderRadius: 12,
+              border: `2px solid ${n === v ? "#c9a84c" : "#333"}`,
+              background: n === v ? "rgba(201,168,76,0.15)" : "transparent",
+              color: n === v ? "#c9a84c" : "#555",
+              fontSize: 22, cursor: "pointer", fontFamily: "Georgia,serif",
+            }}>{v}</button>
+          ))}
+        </div>
+
+        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Dificultat dels bots</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+          {BOT_TYPES.map(bt => (
+            <button key={bt.id} onClick={() => setBotType(bt.id)} style={{
+              padding: "9px 14px", borderRadius: 10,
+              border: `1px solid ${botType === bt.id ? "#c9a84c" : "#2a2a2a"}`,
+              background: botType === bt.id ? "rgba(201,168,76,0.12)" : "transparent",
+              color: "white", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ color: botType === bt.id ? "#c9a84c" : "#ccc", fontWeight: "bold", fontSize: 14 }}>{bt.label}</span>
+                <span style={{
+                  fontSize: 10, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap",
+                  background: bt.diff === 'Fàcil' ? "rgba(76,175,80,0.2)" : bt.diff === 'Mitjà' ? "rgba(255,152,0,0.2)" : "rgba(239,83,80,0.2)",
+                  color: bt.diff === 'Fàcil' ? "#81C784" : bt.diff === 'Mitjà' ? "#FFB74D" : "#EF9A9A",
+                }}>{bt.diff}</span>
+              </div>
+              <span style={{ color: "#555", fontSize: 11, textAlign: "right" }}>{bt.desc}</span>
+            </button>
+          ))}
+        </div>
+
+        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Regles especials</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 24 }}>
+          <Toggle
+            value={prohibitQuadrar} onChange={setProhibitQuadrar}
+            label="Prohibit quadrar"
+            desc="L'últim en parlar no pot igualar el total de mans"
+          />
+          <Toggle
+            value={rondesIndia} onChange={setRondesIndia}
+            label="Última ronda índia"
+            desc="En l'última ronda veus les cartes dels altres però no la teva"
           />
         </div>
 
