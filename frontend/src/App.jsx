@@ -49,6 +49,128 @@ function SuitIcon({ pal, size = 22 }) {
 }
 const PHASE = { BID:"bid", PLAY:"play", TRICK_END:"trick_end", ROUND_END:"round_end", GAME_END:"game_end" };
 
+// ══ Tutorial Data ════════════════════════════════════════════════════════════
+const T_ROUNDS = [3, 2, 1];
+// Players en tutorial: 0=Bot1, 1=Tu(human), 2=Bot2
+const T_HANDS_DATA = [
+  { trump:'Bastos', trumpCard:{pal:'Bastos',valor:3}, startIdx:0,
+    bids:{0:1,1:1,2:2},
+    hands:{
+      0:[{pal:'Copes',valor:3},{pal:'Bastos',valor:10},{pal:'Espases',valor:7}],
+      1:[{pal:'Copes',valor:1},{pal:'Copes',valor:7},{pal:'Espases',valor:10}],
+      2:[{pal:'Ors',valor:3},{pal:'Bastos',valor:12},{pal:'Ors',valor:11}],
+    }
+  },
+  { trump:'Copes', trumpCard:{pal:'Copes',valor:5}, startIdx:0,
+    bids:{0:1,1:1,2:0},
+    hands:{
+      0:[{pal:'Espases',valor:1},{pal:'Copes',valor:7}],
+      1:[{pal:'Espases',valor:12},{pal:'Copes',valor:3}],
+      2:[{pal:'Espases',valor:3},{pal:'Ors',valor:11}],
+    }
+  },
+  { trump:'Ors', trumpCard:{pal:'Ors',valor:7}, startIdx:2,
+    bids:{0:0,1:1,2:0},
+    hands:{
+      0:[{pal:'Copes',valor:7}],
+      1:[{pal:'Ors',valor:1}],
+      2:[{pal:'Bastos',valor:3}],
+    }
+  },
+];
+// Bot plays predefinides: key="round-trickDone-playerIdx"
+const T_BOT_PLAYS = {
+  '0-0-0':{pal:'Copes',valor:3},   '0-0-2':{pal:'Bastos',valor:12},
+  '0-1-2':{pal:'Ors',valor:11},    '0-1-0':{pal:'Bastos',valor:10},
+  '0-2-0':{pal:'Espases',valor:7}, '0-2-2':{pal:'Ors',valor:3},
+  '1-0-0':{pal:'Espases',valor:1}, '1-0-2':{pal:'Espases',valor:3},
+  '1-1-0':{pal:'Copes',valor:7},   '1-1-2':{pal:'Ors',valor:11},
+  '2-0-2':{pal:'Bastos',valor:3},  '2-0-0':{pal:'Copes',valor:7},
+};
+const T_STEPS = [
+  {text:"Benvingut al tutorial! A continuació aprendrem a jugar a la Podrida. Toca la pantalla per a continuar."},
+  {text:"La base de la Podrida és guanyar mans i, sobretot, encertar quantes en guanyaràs. Força relativa: A · 3 · 12 · 11 · 10 · 7 · 6 · 5 · 4 · 2", showOrder:true},
+  {text:"Fem una partida curta d'exemple. Barregem les cartes i repartim una ronda de 3. (En aquest tutorial podràs veure les cartes dels altres jugadors per entendre-ho millor.)"},
+  {text:"L'última carta de la baralla marca el trunfo: en aquest cas el 3 de Bastos. Això vol dir que les cartes de Bastos guanyen qualsevol altre pal!"},
+  {title:"Fase de Cantar", text:"Cada jugador diu quantes mans creu que farà en aquesta ronda."},
+  {text:"Tens l'As de Copes (la carta més forta del seu pal). Pots intentar guanyar una mà. Canta 1.", forceBid:1},
+  {title:"Fase de Jugar", text:"Cada jugador intenta guanyar exactament el número de mans que ha cantat."},
+  {text:"Han obert amb Copes. Recorda: cal seguir el pal obert i, si pots, superar. Podries seguir amb l'As o el 7, però només l'As supera el 3 — estàs obligat a jugar l'As!", forceCard:{pal:'Copes',valor:1}},
+  {text:"El Bot2 no ha pogut seguir perquè no tenia Copes però ha guanyat la mà jugant el trumfo. El trumfo guanya qualsevol carta d'un altre pal, fins i tot l'As!"},
+  {text:"No tens Ors ni trumfo. No pots seguir ni superar. Per tant, pots tirar qualsevol carta. Descarta el 7 de Copes.", forceCard:{pal:'Copes',valor:7}},
+  {text:"El Bot1 no tenia Ors però tenia trumfo."},
+  {text:"Només et queda el 10 d'Espases. Juga'l i guanyaràs la mà!", forceCard:{pal:'Espases',valor:10}},
+  {text:"El Bot2 no tenia Espases ni trumfo. Per tant, pot tirar el que vulgui."},
+  {title: "Fase de Recompte", text:"Ronda 1: Tu 1 mà ✓ (+13 pts) · Bot1 1 mà ✓ (+13 pts) · Bot2 1 de 2 ✗ (-3 pts)."},
+  {text:"Nou trumfo: Copes."},
+  {text:"Tens el 12 d'Espases i el 3 de Copes (trumfo). Hauries de fer 1 mà. Canta 1.", forceBid:1},
+  {text:"Potser voldries jugar el trumfo... però primer has de seguir el pal! El 12 no supera l'As, però l'has de jugar igualment.", forceCard:{pal:'Espases',valor:12}},
+  {text:"Seguir el pal és obligatori fins i tot si no pots superar i tens trumfo a la mà."},
+  {text:"Només et queda el 3 de Copes (trumfo). Juga'l i guanya la mà!", forceCard:{pal:'Copes',valor:3}},
+  {text:"El 3 de Copes supera el 7 de Copes. Recorda l'ordre: A · 3 · 12 · 11..."},
+  {text:"Ronda 2: Tu 1 mà ✓ (+13 pts) · Bot1 1 mà ✓ (+13 pts) · Bot2 0 mans ✓ (+10 pts)."},
+  {text:"Última ronda! 1 carta per cap. Trumfo: Ors."},
+  {text:"Quina sort! Tens l'As d'Ors, el trumfo més fort! És segur que guanyaràs la mà. Canta 1.", forceBid:1},
+  {text:"Som-hi!", forceCard:{pal:'Ors',valor:1}},
+  {text:"Tutorial completat! Ara ja coneixes les regles bàsiques de la Podrida: seguir el pal, superar si pots, i el trumfo ho guanya tot. Bona sort!"},
+];
+const T_TRIGGERS = [
+  {w:'start'},{w:'start'},{w:'start'},
+  {w:'roundStart',r:0},
+  {w:'afterBid',r:0},
+  {w:'humanBid',r:0},
+  {w:'playStart',r:0},
+  {w:'humanPlay',r:0,t:0},{w:'trickEnd',r:0,t:0},
+  {w:'humanPlay',r:0,t:1},{w:'trickEnd',r:0,t:1},
+  {w:'humanPlay',r:0,t:2},{w:'trickEnd',r:0,t:2},
+  {w:'roundEnd',r:0},
+  {w:'roundStart',r:1},{w:'humanBid',r:1},
+  {w:'humanPlay',r:1,t:0},{w:'trickEnd',r:1,t:0},
+  {w:'humanPlay',r:1,t:1},{w:'trickEnd',r:1,t:1},
+  {w:'roundEnd',r:1},
+  {w:'roundStart',r:2},{w:'humanBid',r:2},
+  {w:'humanPlay',r:2,t:0},
+  {w:'gameEnd'},
+];
+
+function checkTutTrig(game, humanIdx) {
+  if (!game.isTutorial || game.tutPaused) return false;
+  const tr = T_TRIGGERS[game.tutStep]; if (!tr) return false;
+  const { phase, roundIdx, taken, curBidder, curPlayer, bids, trick } = game;
+  const done = Object.values(taken).reduce((a,b)=>a+b,0);
+  const ti   = phase === PHASE.TRICK_END ? done-1 : done;
+  switch(tr.w) {
+    case 'start':      return roundIdx===0 && phase===PHASE.BID && Object.keys(bids).length===0;
+    case 'roundStart': return roundIdx===tr.r && phase===PHASE.BID && Object.keys(bids).length===0;
+    case 'humanBid':   return roundIdx===tr.r && phase===PHASE.BID && curBidder===humanIdx;
+    case 'afterBid':   return roundIdx===tr.r && phase===PHASE.BID && curBidder===humanIdx;
+    case 'playStart':  return roundIdx===tr.r && phase===PHASE.PLAY && done===0 && trick.length===0;
+    case 'humanPlay':  return roundIdx===tr.r && phase===PHASE.PLAY && curPlayer===humanIdx && ti===tr.t;
+    case 'trickEnd':   return roundIdx===tr.r && phase===PHASE.TRICK_END && ti===tr.t;
+    case 'roundEnd':   return roundIdx===tr.r && (phase===PHASE.ROUND_END||phase===PHASE.GAME_END);
+    case 'gameEnd':    return phase===PHASE.GAME_END;
+    default: return false;
+  }
+}
+
+function setupTutRound(state, rIdx) {
+  const td  = T_HANDS_DATA[rIdx];
+  const n   = 3;
+  const ord = Array.from({length:n}, (_, i) => (td.startIdx + i) % n);
+  return {
+    ...state,
+    phase: PHASE.BID, roundIdx: rIdx, startIdx: td.startIdx,
+    hands: Object.fromEntries(Object.entries(td.hands).map(([k,v])=>[Number(k),[...v]])),
+    trump: td.trump, trumpCard: td.trumpCard,
+    bids: {}, taken: {0:0,1:0,2:0}, trick: [],
+    trickLeader: td.startIdx, curPlayer: td.startIdx,
+    curBidder: td.startIdx, bidStep: 0, bidOrder: ord,
+    selected: null, trickWinner: null, roundScores: null,
+    _nextPhase: null, buits: {}, cartesJugades: [],
+    tutPaused: true,
+  };
+}
+
 // ══ Game Logic ════════════════════════════════════════════════════════════
 const forçaCarta = c => ORDRE_FORÇA.length - ORDRE_FORÇA.indexOf(c.valor);
 const cardKey = c => `${c.pal}-${c.valor}`;
@@ -346,687 +468,4 @@ function construeixObsRL(state, pi) {
   // F: progrés
   obs[off] = prog; obs[off+1] = nC / 8; off += 2;
   // G: fase
-  obs[off + (nC < 8 ? (roundIdx < 7 ? 0 : 2) : 1)] = 1; off += 3;
-  // H: info pròpia
-  obs[off]   = (bids[pi] ?? 0) / nCf;
-  obs[off+1] = (taken[pi] ?? 0) / nCf;
-  obs[off+2] = Math.max(0, nC - trick.length) / nCf; off += 3;
-  // I: oponents en ordre relatiu
-  const ordreAct = Array.from({length: n}, (_, k) => (trickLeader + k) % n);
-  const piPos    = ordreAct.indexOf(pi);
-  for (let k = 1; k < n; k++) {
-    const op  = ordreAct[(piPos + k) % n];
-    const bop = buits[op] || {};
-    obs[off]   = (bids[op] ?? 0) / nCf;
-    obs[off+1] = (taken[op] ?? 0) / nCf;
-    obs[off+2] = ((hands[op] || []).length) / nCf;
-    PALS_RL.forEach((p, i) => { obs[off + 3 + i] = bop[p] ? 1 : 0; });
-    off += 7;
-  }
-  // J: scores ponderats
-  const pes  = prog * prog;
-  const sc   = scores || {};
-  obs[off++] = (sc[pi] ?? 0) / 200 * pes;
-  for (let k = 1; k < n; k++) {
-    const op = ordreAct[(piPos + k) % n];
-    obs[off++] = ((sc[op] ?? 0) - (sc[pi] ?? 0)) / 200 * pes;
-  }
-  return Array.from(obs);
-}
-
-// ══ State Transitions ═════════════════════════════════════════════════════
-function setupRound(state) {
-  const { players, rounds, roundIdx, startIdx } = state;
-  const n = players.length;
-  const nC = rounds[roundIdx];
-  const deck = barreja(construeixBaralla(n));
-  const ordre = Array.from({length: n}, (_, i) => (startIdx + i) % n);
-  const repOrdre = [...ordre.slice(1), ordre[0]];
-  const hands = {};
-  repOrdre.forEach((pi, i) => { hands[pi] = deck.slice(i * nC, (i + 1) * nC); });
-  const trumpCard = deck[deck.length - 1];
-  return {
-    ...state,
-    phase: PHASE.BID,
-    hands,
-    trump: trumpCard.pal,
-    trumpCard,
-    bids: {},
-    taken: Object.fromEntries(players.map((_, i) => [i, 0])),
-    trick: [],
-    trickLeader: startIdx,
-    curPlayer: startIdx,
-    curBidder: startIdx,
-    bidStep: 0,
-    bidOrder: ordre,
-    selected: null,
-    trickWinner: null,
-    roundScores: null,
-    _nextPhase: null,
-    buits: {},
-    cartesJugades: [],
-    rules: state.rules || {},
-  };
-}
-
-function doBid(state, bid) {
-  const { curBidder, bidStep, bidOrder, startIdx } = state;
-  const newBids = { ...state.bids, [curBidder]: bid };
-  const nextStep = bidStep + 1;
-  if (nextStep >= bidOrder.length) {
-    return { ...state, bids: newBids, phase: PHASE.PLAY, curPlayer: startIdx, bidStep: nextStep };
-  }
-  return { ...state, bids: newBids, curBidder: bidOrder[nextStep], bidStep: nextStep };
-}
-
-function doPlay(state, carta) {
-  const { curPlayer, players, trump, trick, trickLeader, hands, bids, taken } = state;
-  const n = players.length;
-  const newHands = { ...hands, [curPlayer]: removeCard(hands[curPlayer], carta) };
-  const newTrick = [...trick, { pi: curPlayer, carta }];
-
-  // Tracking buits: si el jugador no segueix el pal obert, és buit en aquell pal
-  let newBuits = state.buits || {};
-  if (trick.length > 0 && carta.pal !== trick[0].carta.pal) {
-    const palObert = trick[0].carta.pal;
-    newBuits = { ...newBuits, [curPlayer]: [...(newBuits[curPlayer] || []), palObert] };
-  }
-
-  if (newTrick.length === n) {
-    let millor = null, winner = null;
-    for (const { pi, carta: c } of newTrick) {
-      if (supera(c, millor, trump)) { millor = c; winner = pi; }
-    }
-    const newTaken = { ...taken, [winner]: taken[winner] + 1 };
-    const cardsLeft = newHands[winner].length;
-
-    if (cardsLeft === 0) {
-      const roundScores = {};
-      const newTotals = { ...state.scores };
-      players.forEach((_, i) => {
-        const cantada = bids[i], fetes = newTaken[i];
-        const d = cantada === fetes ? 10 + 3 * fetes : -3 * Math.abs(cantada - fetes);
-        roundScores[i] = d;
-        newTotals[i] = (newTotals[i] || 0) + d;
-      });
-      const isLast = state.roundIdx === state.rounds.length - 1;
-      return {
-        ...state, hands: newHands, trick: newTrick, taken: newTaken,
-        trickWinner: winner, phase: PHASE.TRICK_END,
-        scores: newTotals, roundScores, buits: newBuits,
-        cartesJugades: [...(state.cartesJugades || []), ...newTrick.map(t => t.carta)],
-        _nextPhase: isLast ? PHASE.GAME_END : PHASE.ROUND_END,
-        selected: null,
-      };
-    }
-    return {
-      ...state, hands: newHands, trick: newTrick, taken: newTaken,
-      trickWinner: winner, phase: PHASE.TRICK_END, buits: newBuits,
-      cartesJugades: [...(state.cartesJugades || []), ...newTrick.map(t => t.carta)],
-      selected: null,
-    };
-  }
-
-  const trickOrder = Array.from({length: n}, (_, i) => (trickLeader + i) % n);
-  const nextPlayer = trickOrder[trickOrder.indexOf(curPlayer) + 1];
-  return { ...state, hands: newHands, trick: newTrick, curPlayer: nextPlayer, selected: null, buits: newBuits };
-}
-
-function advanceTrick(state) {
-  const { trickWinner, _nextPhase } = state;
-  if (_nextPhase) return { ...state, trick: [], phase: _nextPhase };
-  return { ...state, trick: [], phase: PHASE.PLAY, curPlayer: trickWinner, trickLeader: trickWinner, trickWinner: null };
-}
-
-// ══ Card Components ════════════════════════════════════════════════════════
-function CardFront({ carta, selected, disabled, onClick, size = "md" }) {
-  const s = PAL_STYLE[carta.pal];
-  const [w, h, fv, fs] = size === "sm" ? [36, 52, 10, 15] : [52, 74, 14, 22];
-  return (
-    <div onClick={!disabled ? onClick : undefined} style={{
-      width: w, height: h, borderRadius: 7,
-      background: selected ? "#FFFDE7" : "white",
-      border: `2px solid ${selected ? "#F9A825" : disabled ? "#ddd" : s.color}`,
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      cursor: disabled ? "default" : "pointer",
-      boxShadow: selected ? `0 6px 16px ${s.glow}88` : "1px 2px 6px rgba(0,0,0,0.3)",
-      transform: selected ? "translateY(-10px)" : "none",
-      transition: "all 0.15s ease",
-      opacity: disabled ? 0.4 : 1,
-      userSelect: "none", flexShrink: 0,
-    }}>
-      <span style={{ fontSize: fv, color: s.color, fontWeight: 800, lineHeight: 1, fontFamily: "Georgia,serif", marginBottom: 2 }}>
-        {NOM_VALOR[carta.valor]}
-      </span>
-      <SuitIcon pal={carta.pal} size={fs + 4} />
-    </div>
-  );
-}
-
-function StackedHand({ count }) {
-  const W = 28, H = 40, OFFSET = 5;
-  const total = Math.min(count, 12);
-  return (
-    <div style={{ position: "relative", width: W + OFFSET * (total - 1), height: H, flexShrink: 0 }}>
-      {Array.from({ length: total }).map((_, i) => (
-        <div key={i} style={{
-          position: "absolute", left: i * OFFSET, top: 0,
-          width: W, height: H, borderRadius: 4,
-          background: "repeating-linear-gradient(45deg,#1a237e,#1a237e 3px,#283593 3px,#283593 6px)",
-          border: "1.5px solid #5c6bc0",
-          boxShadow: "1px 1px 3px rgba(0,0,0,0.4)",
-          zIndex: i,
-        }} />
-      ))}
-
-    </div>
-  );
-}
-
-function CardBack({ size = "md" }) {
-  const [w, h] = size === "sm" ? [36, 52] : [52, 74];
-  return (
-    <div style={{
-      width: w, height: h, borderRadius: 7,
-      background: "repeating-linear-gradient(45deg,#1a237e,#1a237e 4px,#283593 4px,#283593 8px)",
-      border: "2px solid #5c6bc0",
-      boxShadow: "1px 2px 6px rgba(0,0,0,0.4)",
-      flexShrink: 0,
-    }} />
-  );
-}
-
-// ══ Opponent Layout ════════════════════════════════════════════════════════
-// Posició visual basada en passos en l'ordre de joc respecte al humà.
-// steps=1 → juga just després del humà → DRETA (sentit horari)
-// steps=2 → DALT, steps=3 → ESQUERRA, steps=4 → DALT-ESQUERRA (per n=5)
-function playerPosition(playerIdx, humanIdx, n) {
-  const steps = (playerIdx - humanIdx + n) % n;
-  const pos = {
-    3: {
-      1: { top: 16, right: "18%", transform: "translateX(50%)" },
-      2: { top: 16, left: "18%", transform: "translateX(-50%)" },
-    },
-    4: {
-      1: { top: "36%", right: 8, transform: "translateY(-50%)" },
-      2: { top: 10, left: "50%", transform: "translateX(-50%)" },
-      3: { top: "36%", left: 8, transform: "translateY(-50%)" },
-    },
-    5: {
-      1: { top: "36%", right: 8, transform: "translateY(-50%)" },
-      2: { top: 10, right: "20%", transform: "translateX(50%)" },
-      3: { top: 10, left: "20%", transform: "translateX(-50%)" },
-      4: { top: "36%", left: 8, transform: "translateY(-50%)" },
-    },
-  };
-  return (pos[n] || pos[4])[steps] || { top: 0, left: "50%" };
-}
-
-// ══ Setup Screen ═══════════════════════════════════════════════════════════
-const BOT_TYPES = [
-  { id: 'random',    label: 'Aleatori',  diff: 'Fàcil',   desc: "Juga a l'atzar" },
-  { id: 'heuristic', label: 'Heurístic', diff: 'Mitjà',   desc: 'Segueix regles bàsiques' },
-  { id: 'ismcts',    label: 'ISMCTS',    diff: 'Difícil', desc: 'Cerca per simulació' },
-];
-
-function Toggle({ value, onChange, label, desc }) {
-  return (
-    <div onClick={() => onChange(!value)} style={{
-      display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-      borderRadius: 10, cursor: "pointer",
-      border: `1px solid ${value ? "#c9a84c" : "#2a2a2a"}`,
-      background: value ? "rgba(201,168,76,0.08)" : "transparent",
-      transition: "all 0.15s",
-    }}>
-      <div style={{
-        width: 34, height: 20, borderRadius: 10, position: "relative",
-        background: value ? "#c9a84c" : "#333", transition: "background 0.2s", flexShrink: 0,
-      }}>
-        <div style={{
-          position: "absolute", top: 2, left: value ? 16 : 2,
-          width: 16, height: 16, borderRadius: 8,
-          background: "white", transition: "left 0.2s",
-        }} />
-      </div>
-      <div style={{ textAlign: "left" }}>
-        <div style={{ color: value ? "#c9a84c" : "#888", fontSize: 13, fontWeight: "bold" }}>{label}</div>
-        <div style={{ color: "#555", fontSize: 11 }}>{desc}</div>
-      </div>
-    </div>
-  );
-}
-
-function SetupScreen({ onStart }) {
-  const [n, setN] = useState(4);
-  const [botType, setBotType] = useState('heuristic');
-  const [prohibitQuadrar, setProhibitQuadrar] = useState(false);
-  const [rondesIndia, setRondesIndia] = useState(false);
-
-  return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
-      <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "32px 40px", textAlign: "center", color: "white", width: "min(360px, 90vw)" }}>
-        <div style={{ fontSize: 48, marginBottom: 4 }}>🃏</div>
-        <h1 style={{ margin: "0 0 4px", fontSize: 32, letterSpacing: 3, color: "#c9a84c", fontFamily: "Georgia,serif" }}>LA PODRIDA</h1>
-        <p style={{ color: "#555", fontSize: 12, marginBottom: 28 }}>Joc tradicional de cartes</p>
-
-        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Jugadors totals</p>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 24 }}>
-          {[3, 4, 5].map(v => (
-            <button key={v} onClick={() => setN(v)} style={{
-              width: 52, height: 52, borderRadius: 12,
-              border: `2px solid ${n === v ? "#c9a84c" : "#333"}`,
-              background: n === v ? "rgba(201,168,76,0.15)" : "transparent",
-              color: n === v ? "#c9a84c" : "#555",
-              fontSize: 22, cursor: "pointer", fontFamily: "Georgia,serif",
-            }}>{v}</button>
-          ))}
-        </div>
-
-        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Dificultat dels bots</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
-          {BOT_TYPES.map(bt => (
-            <button key={bt.id} onClick={() => setBotType(bt.id)} style={{
-              padding: "9px 14px", borderRadius: 10,
-              border: `1px solid ${botType === bt.id ? "#c9a84c" : "#2a2a2a"}`,
-              background: botType === bt.id ? "rgba(201,168,76,0.12)" : "transparent",
-              color: "white", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <span style={{ color: botType === bt.id ? "#c9a84c" : "#ccc", fontWeight: "bold", fontSize: 14 }}>{bt.label}</span>
-                <span style={{
-                  fontSize: 10, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap",
-                  background: bt.diff === 'Fàcil' ? "rgba(76,175,80,0.2)" : bt.diff === 'Mitjà' ? "rgba(255,152,0,0.2)" : "rgba(239,83,80,0.2)",
-                  color: bt.diff === 'Fàcil' ? "#81C784" : bt.diff === 'Mitjà' ? "#FFB74D" : "#EF9A9A",
-                }}>{bt.diff}</span>
-              </div>
-              <span style={{ color: "#555", fontSize: 11, textAlign: "right" }}>{bt.desc}</span>
-            </button>
-          ))}
-        </div>
-
-        <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Regles especials</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 24 }}>
-          <Toggle
-            value={prohibitQuadrar} onChange={setProhibitQuadrar}
-            label="Prohibit quadrar"
-            desc="L'últim en parlar no pot igualar el total de mans"
-          />
-          <Toggle
-            value={rondesIndia} onChange={setRondesIndia}
-            label="Última ronda índia"
-            desc="En l'última ronda veus les cartes dels altres però no la teva"
-          />
-        </div>
-
-        <button onClick={() => onStart(n, botType, { prohibitQuadrar, rondesIndia })} style={{
-          width: "100%", padding: "13px 0", borderRadius: 12,
-          border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
-          color: "#c9a84c", fontSize: 17, cursor: "pointer",
-          fontFamily: "Georgia,serif", letterSpacing: 2,
-        }}>Jugar</button>
-      </div>
-    </div>
-  );
-}
-
-// ══ Round End Overlay ══════════════════════════════════════════════════════
-function RoundEndOverlay({ game, onNext }) {
-  const { players, scores, bids, taken, roundIdx, phase, roundScores } = game;
-  const sorted = players
-    .map((p, i) => ({ ...p, i, score: scores[i], delta: roundScores?.[i] ?? 0, bid: bids[i], fetes: taken[i] }))
-    .sort((a, b) => b.score - a.score);
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-      <div style={{ background: "#0a1f10", border: "1px solid #2a5a3a", borderRadius: 18, padding: "28px 36px", minWidth: 310, color: "white", textAlign: "center", fontFamily: "Georgia,serif" }}>
-        <h2 style={{ margin: "0 0 4px", color: "#c9a84c", fontSize: 20 }}>
-          {phase === PHASE.GAME_END ? "🏆 Partida Acabada" : `Ronda ${roundIdx + 1} · Resultat`}
-        </h2>
-        <div style={{ height: 1, background: "#1e4a28", margin: "14px 0" }} />
-        {sorted.map(p => (
-          <div key={p.i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #142810", gap: 12, fontFamily: "sans-serif", fontSize: 13 }}>
-            <span style={{ color: p.isHuman ? "#c9a84c" : "#ccc", minWidth: 58, textAlign: "left", fontWeight: p.isHuman ? "bold" : "normal" }}>{p.name}</span>
-            <span style={{ color: "#555", fontSize: 11 }}>canta {p.bid} · fa {p.fetes}</span>
-            <span style={{ fontWeight: "bold", minWidth: 36, textAlign: "right", color: p.delta >= 0 ? "#4CAF50" : "#ef5350" }}>
-              {p.delta >= 0 ? "+" : ""}{p.delta}
-            </span>
-            <span style={{ color: "#c9a84c", fontWeight: "bold", minWidth: 36, textAlign: "right" }}>{p.score}</span>
-          </div>
-        ))}
-        <button onClick={onNext} style={{
-          marginTop: 20, width: "100%", padding: "13px 0", borderRadius: 10,
-          border: "1px solid #c9a84c", background: "rgba(201,168,76,0.08)",
-          color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-        }}>
-          {phase === PHASE.GAME_END ? "Nova partida" : "Següent ronda →"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ══ Game Screen ════════════════════════════════════════════════════════════
-function GameScreen({ game, setGame, onRestart }) {
-  const { players, scores, phase, trump, trumpCard, bids, taken, trick, rounds, roundIdx, hands, curBidder, curPlayer, selected, trickWinner, startIdx, rules = {} } = game;
-  const isRondaIndia = rules.rondesIndia && roundIdx === rounds.length - 1;
-  const n = players.length;
-  const nC = rounds[roundIdx];
-  const humanIdx = players.findIndex(p => p.isHuman);
-  const humanHand = hands[humanIdx] || [];
-  const ps = PAL_STYLE[trump] || {};
-
-  const palObert = trick.length ? trick[0].carta.pal : null;
-  const millorT = millorATaula(trick, trump);
-  const llegals = phase === PHASE.PLAY && curPlayer === humanIdx
-    ? jugadesLegals(humanHand, palObert, millorT, trump)
-    : [];
-  const legalKeys = new Set(llegals.map(cardKey));
-
-  // Animació ronda índia
-  const [indiaAnim, setIndiaAnim] = useState({ vis: false, op: 0 });
-  useEffect(() => {
-    if (isRondaIndia) {
-      setIndiaAnim({ vis: true, op: 0 });
-      const t1 = setTimeout(() => setIndiaAnim({ vis: true, op: 1 }), 50);
-      const t2 = setTimeout(() => setIndiaAnim({ vis: true, op: 0 }), 2200);
-      const t3 = setTimeout(() => setIndiaAnim({ vis: false, op: 0 }), 2700);
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-    }
-  }, [roundIdx]);
-
-  const handleCardClick = carta => {
-    if (phase !== PHASE.PLAY || curPlayer !== humanIdx) return;
-    if (!legalKeys.has(cardKey(carta))) return;
-    if (cardsEq(selected, carta)) {
-      setGame(g => doPlay({ ...g, selected: null }, carta));
-    } else {
-      setGame(g => ({ ...g, selected: carta }));
-    }
-  };
-
-  const handleBid = bid => {
-    if (phase !== PHASE.BID || curBidder !== humanIdx) return;
-    setGame(g => doBid(g, bid));
-  };
-
-  const opponents = players.map((p, i) => ({ ...p, idx: i })).filter(p => !p.isHuman);
-
-  const isHumanTurn = phase === PHASE.PLAY && curPlayer === humanIdx;
-  const isHumanBidding = phase === PHASE.BID && curBidder === humanIdx;
-
-  return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 40%, #1a472a 0%, #0a1f10 100%)", display: "flex", flexDirection: "column", fontFamily: "sans-serif" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", padding: "8px 12px", gap: 8, borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(0,0,0,0.3)" }}>
-        <button onClick={onRestart} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#666", cursor: "pointer", fontSize: 12 }}>↩</button>
-        <span style={{ color: "#666", fontSize: 12 }}>Ronda <b style={{ color: "#aaa" }}>{roundIdx + 1}</b>/{rounds.length}</span>
-        <span style={{ color: "#555", fontSize: 12 }}>·</span>
-        <span style={{ color: "#666", fontSize: 12 }}><b style={{ color: "#aaa" }}>{nC}</b> {nC > 1 ? "cartes" : "carta"}</span>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.4)", borderRadius: 8, padding: "4px 12px", border: `1px solid ${ps.color || "#333"}40` }}>
-          <span style={{ color: "#666", fontSize: 11 }}>Trumfo</span>
-          <SuitIcon pal={trump} size={16} />
-          <span style={{ color: ps.color, fontSize: 12 }}>{trump}</span>
-          {trumpCard && <span style={{ color: "#555", fontSize: 11 }}>({NOM_VALOR[trumpCard.valor]})</span>}
-        </div>
-      </div>
-
-      {/* Score bar */}
-      <div style={{ display: "flex", gap: 5, padding: "6px 10px", background: "rgba(0,0,0,0.2)" }}>
-        {players.map((p, i) => {
-          const isCurPlay = phase === PHASE.PLAY && curPlayer === i;
-          const isCurBid = phase === PHASE.BID && curBidder === i;
-          const isWin = trickWinner === i;
-          return (
-            <div key={i} style={{
-              flex: 1, borderRadius: 8, padding: "5px 6px", textAlign: "center",
-              background: isWin ? "rgba(201,168,76,0.2)" : isCurPlay || isCurBid ? "rgba(76,175,80,0.15)" : "rgba(0,0,0,0.3)",
-              border: `1px solid ${p.isHuman ? "#c9a84c44" : isCurPlay || isCurBid ? "#4CAF5044" : "transparent"}`,
-              transition: "all 0.3s",
-            }}>
-              <div style={{ fontSize: 10, color: p.isHuman ? "#c9a84c" : "#888", fontWeight: p.isHuman ? "bold" : "normal", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {i === startIdx && <span title="Comença la ronda" style={{ color: "#c9a84c", marginRight: 2 }}>★</span>}
-                {p.name}
-              </div>
-              <div style={{ fontSize: 17, color: "white", fontWeight: "bold", fontFamily: "Georgia,serif" }}>{scores[i]}</div>
-              {bids[i] !== undefined && (
-                <div style={{ fontSize: 10, color: "#666" }}>{taken[i]}/{bids[i]}</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Table */}
-      <div style={{ flex: 1, position: "relative", minHeight: 240 }}>
-        {/* Opponents */}
-        {opponents.map((op) => {
-          const opHand = hands[op.idx] || [];
-          const isCur = (phase === PHASE.BID && curBidder === op.idx) || (phase === PHASE.PLAY && curPlayer === op.idx);
-          return (
-            <div key={op.idx} style={{ position: "absolute", ...playerPosition(op.idx, humanIdx, n), display: "flex", flexDirection: "column", alignItems: "center", gap: 4, zIndex: 1 }}>
-              <div style={{ color: isCur ? "#4CAF50" : "#555", fontSize: 10, textAlign: "center", whiteSpace: "nowrap" }}>
-                {op.idx === startIdx && <span style={{ color: "#c9a84c", marginRight: 3 }}>★</span>}
-                {op.name}
-                {bids[op.idx] !== undefined && ` (${taken[op.idx]}/${bids[op.idx]})`}
-                {phase === PHASE.BID && curBidder === op.idx && " 🤔"}
-                {phase === PHASE.PLAY && curPlayer === op.idx && " ▶"}
-              </div>
-              {isRondaIndia
-                ? <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center", maxWidth: 160 }}>
-                    {opHand.map((c, ci) => <CardFront key={ci} carta={c} disabled size="sm" />)}
-                  </div>
-                : <StackedHand count={opHand.length} />
-              }
-            </div>
-          );
-        })}
-
-        {/* Center trick */}
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "center", minWidth: 60, minHeight: 60 }}>
-          {trick.map(({ pi, carta }, i) => (
-            <div key={i} style={{ textAlign: "center" }}>
-              <div style={{ color: "#555", fontSize: 10, marginBottom: 2 }}>{players[pi].name}</div>
-              <CardFront carta={carta} disabled />
-            </div>
-          ))}
-          {trickWinner !== null && (
-            <div style={{ width: "100%", textAlign: "center", color: "#c9a84c", fontSize: 12, fontWeight: "bold" }}>
-              ★ {players[trickWinner].name} guanya!
-            </div>
-          )}
-        </div>
-
-        {/* Bidding AI waiting */}
-        {phase === PHASE.BID && curBidder !== humanIdx && (
-          <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", color: "#444", fontSize: 12 }}>
-            {players[curBidder].name} canta...
-          </div>
-        )}
-      </div>
-
-      {/* Human hand + bidding */}
-      <div style={{ background: "rgba(0,0,0,0.35)", borderTop: "1px solid rgba(255,255,255,0.06)", padding: "10px 10px 16px" }}>
-        {/* Bid buttons */}
-        {isHumanBidding && (() => {
-          const bidOrder = Array.from({length: n}, (_, i) => (startIdx + i) % n);
-          const isLastBidder = bidOrder[bidOrder.length - 1] === humanIdx;
-          const sumJaCantat = Object.values(bids).reduce((a, b) => a + b, 0);
-          const prohibit = rules.prohibitQuadrar && isLastBidder ? (nC - sumJaCantat) : -1;
-          return (
-            <div style={{ textAlign: "center", marginBottom: 12 }}>
-              <div style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>
-                Quantes mans cantes? <span style={{ color: "#555" }}>({nC} cartes)</span>
-                {prohibit >= 0 && prohibit <= nC && (
-                  <span style={{ color: "#ef5350", marginLeft: 6 }}>· Prohibit quadrar</span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
-                {Array.from({length: nC + 1}, (_, i) => {
-                  const forbidden = i === prohibit;
-                  return (
-                    <button key={i} onClick={() => !forbidden && handleBid(i)} style={{
-                      width: 40, height: 40, borderRadius: 8,
-                      border: `1px solid ${forbidden ? "#555" : "#c9a84c"}`,
-                      background: forbidden ? "rgba(80,80,80,0.1)" : "rgba(201,168,76,0.08)",
-                      color: forbidden ? "#555" : "#c9a84c",
-                      fontSize: 18, cursor: forbidden ? "not-allowed" : "pointer",
-                      fontFamily: "Georgia,serif", fontWeight: "bold",
-                      textDecoration: forbidden ? "line-through" : "none",
-                    }}>{i}</button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Play hint */}
-        {isHumanTurn && (
-          <div style={{ textAlign: "center", color: selected ? "#c9a84c" : "#555", fontSize: 12, marginBottom: 8 }}>
-            {selected ? "Toca de nou per jugar" : "Selecciona una carta"}
-          </div>
-        )}
-
-        {/* Cards */}
-        <div style={{ display: "flex", gap: 5, justifyContent: "center", flexWrap: "wrap" }}>
-          {humanHand.map((carta, i) => {
-            const isLegal = legalKeys.has(cardKey(carta));
-            const isSel = cardsEq(selected, carta);
-            if (isRondaIndia) {
-              return (
-                <div key={i} onClick={() => isHumanTurn && handleCardClick(carta)}
-                  style={{ position: "relative", cursor: isHumanTurn ? "pointer" : "default" }}>
-                  <CardBack />
-                  {isHumanTurn && isLegal && (
-                    <div style={{
-                      position: "absolute", inset: 0, borderRadius: 7,
-                      border: `2px solid ${isSel ? "#F9A825" : "#c9a84c"}`,
-                      boxShadow: `0 0 10px ${isSel ? "#F9A825" : "#c9a84c"}66`,
-                      pointerEvents: "none",
-                    }} />
-                  )}
-                </div>
-              );
-            }
-            return (
-              <CardFront key={i} carta={carta} selected={isSel}
-                disabled={!isHumanTurn || !isLegal}
-                onClick={() => handleCardClick(carta)} />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Animació ronda índia */}
-      {indiaAnim.vis && (
-        <div style={{
-          position: "fixed", inset: 0, display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", zIndex: 40,
-          pointerEvents: "none",
-          opacity: indiaAnim.op, transition: "opacity 0.4s ease",
-        }}>
-          <div style={{
-            background: "rgba(0,0,0,0.75)", borderRadius: 24,
-            padding: "24px 36px", textAlign: "center",
-            border: "1px solid #c9a84c44",
-            transform: `scale(${indiaAnim.op === 1 ? 1 : 0.8})`,
-            transition: "opacity 0.4s ease, transform 0.4s ease",
-          }}>
-            <div style={{ fontSize: 56, lineHeight: 1.2 }}>🪶</div>
-            <div style={{ color: "#c9a84c", fontSize: 16, fontFamily: "Georgia,serif", marginTop: 8, letterSpacing: 1 }}>Ronda Índia</div>
-          </div>
-        </div>
-      )}
-
-      {/* Overlays */}
-      {(phase === PHASE.ROUND_END || phase === PHASE.GAME_END) && (
-        <RoundEndOverlay game={game} onNext={() => {
-          if (phase === PHASE.GAME_END) { onRestart(); return; }
-          setGame(g => setupRound({
-            ...g,
-            roundIdx: g.roundIdx + 1,
-            startIdx: (g.startIdx + 1) % g.players.length,
-          }));
-        }} />
-      )}
-    </div>
-  );
-}
-
-// ══ Root ══════════════════════════════════════════════════════════════════
-export default function App() {
-  const [game, setGame] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!game || busy) return;
-    const { phase, curBidder, curPlayer, players } = game;
-
-    if (phase === PHASE.BID && !players[curBidder].isHuman) {
-      setBusy(true);
-      const isISMCTS = players[curBidder].botType === 'ismcts';
-      setTimeout(() => {
-        setGame(g => {
-          const { rounds, roundIdx, bids: curBids, rules: r = {} } = g;
-          const nC = rounds[roundIdx];
-          const bidOrder = Array.from({length: g.players.length}, (_, i) => (g.startIdx + i) % g.players.length);
-          const isLast = bidOrder[bidOrder.length - 1] === g.curBidder;
-          const sumJa = Object.values(curBids).reduce((a, b) => a + b, 0);
-          const prohibit = r.prohibitQuadrar && isLast ? (nC - sumJa) : -1;
-          let bid = isISMCTS
-            ? mcBidJS(g, g.curBidder, 120)
-            : hCant(g.hands[g.curBidder], g.trump, nC);
-          if (bid === prohibit) bid = prohibit > 0 ? prohibit - 1 : prohibit + 1;
-          bid = Math.max(0, Math.min(bid, nC));
-          return doBid(g, bid);
-        });
-        setBusy(false);
-      }, isISMCTS ? 600 : 380);
-    }
-
-    if (phase === PHASE.PLAY && !players[curPlayer].isHuman) {
-      setBusy(true);
-      const isISMCTS = players[curPlayer].botType === 'ismcts';
-      setTimeout(() => {
-        setGame(g => {
-          const { curPlayer: pi, hands: h, trump: t, trick: tr, bids: b, taken: tk } = g;
-          const palObert = tr.length ? tr[0].carta.pal : null;
-          const millor = millorATaula(tr, t);
-          const llegals = jugadesLegals(h[pi], palObert, millor, t);
-          const carta = isISMCTS
-            ? ismctsPlayJS(g, pi, llegals, 200)
-            : hJuga(h[pi], tr, t, b[pi], tk[pi], llegals);
-          return doPlay(g, carta);
-        });
-        setBusy(false);
-      }, isISMCTS ? 700 : 560);
-    }
-
-    if (phase === PHASE.TRICK_END) {
-      setBusy(true);
-      setTimeout(() => {
-        setGame(g => advanceTrick(g));
-        setBusy(false);
-      }, 1100);
-    }
-  }, [game?.phase, game?.curBidder, game?.curPlayer, game?.trickWinner, busy]);
-
-  const handleStart = (n, botType, rules = {}) => {
-    const players = [
-      { name: "Tu", isHuman: true, botType: null },
-      ...Array.from({length: n - 1}, (_, i) => ({ name: `Bot ${i + 1}`, isHuman: false, botType })),
-    ];
-    setGame(setupRound({
-      players,
-      scores: Object.fromEntries(players.map((_, i) => [i, 0])),
-      rounds: seqRondes(n),
-      roundIdx: 0,
-      startIdx: Math.floor(Math.random() * n),
-      rules,
-    }));
-  };
-
-  if (!game) return <SetupScreen onStart={handleStart} />;
-  return <GameScreen game={game} setGame={setGame} onRestart={() => setGame(null)} />;
-}
+  obs[off + 
