@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 // â•â• Constants â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const PALS = ["Ors", "Copes", "Espases", "Bastos"];
-const ORDRE_FORÃ‡A = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
+const ORDRE_FORCA = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
 const NOM_VALOR = { 1:"A", 2:"2", 3:"3", 4:"4", 5:"5", 6:"6", 7:"7", 10:"10", 11:"11", 12:"12" };
 const PAL_STYLE = {
   Ors:     { color: "#B8860B", glow: "#FFD700" },
@@ -437,11 +437,11 @@ let RL_PESOS = null;
 
 // ObservaciÃ³ simplificada per al bot RL al React
 // (equivalent a agents/observacio.py perÃ² en JS)
-const ORDRE_FORÃ‡A_RL = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
+const ORDRE_FORCA_RL = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
 const PALS_RL = ["Ors", "Copes", "Espases", "Bastos"];
 
-function forÃ§aIdx(carta) {
-  return PALS_RL.indexOf(carta.pal) * 10 + ORDRE_FORÃ‡A_RL.indexOf(carta.valor);
+function forcaIdx(carta) {
+  return PALS_RL.indexOf(carta.pal) * 10 + ORDRE_FORCA_RL.indexOf(carta.valor);
 }
 
 function construeixObsRL(state, pi) {
