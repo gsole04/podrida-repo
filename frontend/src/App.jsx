@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 
-// â•â• Constants â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══ Constants ═══════════════════════════════════════════════════════════════
 const PALS = ["Ors", "Copes", "Espases", "Bastos"];
-const ORDRE_FORCA = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
+const ORDRE_FORÇA = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
 const NOM_VALOR = { 1:"A", 2:"2", 3:"3", 4:"4", 5:"5", 6:"6", 7:"7", 10:"10", 11:"11", 12:"12" };
 const PAL_STYLE = {
   Ors:     { color: "#B8860B", glow: "#FFD700" },
@@ -49,7 +49,7 @@ function SuitIcon({ pal, size = 22 }) {
 }
 const PHASE = { BID:"bid", PLAY:"play", TRICK_END:"trick_end", ROUND_END:"round_end", GAME_END:"game_end" };
 
-// â•â• Tutorial Data â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══ Tutorial Data ════════════════════════════════════════════════════════════
 const T_ROUNDS = [3, 2, 1];
 // Players en tutorial: 0=Bot1, 1=Tu(human), 2=Bot2
 const T_HANDS_DATA = [
@@ -171,16 +171,16 @@ function setupTutRound(state, rIdx) {
   };
 }
 
-// â•â• Game Logic â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const forcaCarta = c => ORDRE_FORCA.length - ORDRE_FORCA.indexOf(c.valor);
+// ══ Game Logic ════════════════════════════════════════════════════════════
+const forçaCarta = c => ORDRE_FORÇA.length - ORDRE_FORÇA.indexOf(c.valor);
 const cardKey = c => `${c.pal}-${c.valor}`;
 const cardsEq = (a, b) => a && b && a.pal === b.pal && a.valor === b.valor;
 const removeCard = (hand, carta) => hand.filter(c => !cardsEq(c, carta));
 
 const construeixBaralla = n => {
   const nTreure = (5 - n) * 2;
-  const excl = nTreure > 0 ? new Set(ORDRE_FORCA.slice(-nTreure)) : new Set();
-  const vals = ORDRE_FORCA.filter(v => !excl.has(v));
+  const excl = nTreure > 0 ? new Set(ORDRE_FORÇA.slice(-nTreure)) : new Set();
+  const vals = ORDRE_FORÇA.filter(v => !excl.has(v));
   return PALS.flatMap(pal => vals.map(valor => ({ pal, valor })));
 };
 
@@ -199,7 +199,7 @@ const supera = (c, millor, trumf) => {
   if (ct && !mt) return true;
   if (mt && !ct) return false;
   if (c.pal !== millor.pal) return false;
-  return forcaCarta(c) > forcaCarta(millor);
+  return forçaCarta(c) > forçaCarta(millor);
 };
 
 const jugadesLegals = (ma, palObert, millor, trumf) => {
@@ -219,9 +219,9 @@ const seqRondes = n => [
   ...Array.from({length: 7}, (_, i) => 7 - i),
 ];
 
-// â•â• AI Heuristic â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const mesForta = cs => cs.reduce((a, b) => forcaCarta(a) >= forcaCarta(b) ? a : b);
-const mesFeble = cs => cs.reduce((a, b) => forcaCarta(a) <= forcaCarta(b) ? a : b);
+// ══ AI Heuristic ══════════════════════════════════════════════════════════
+const mésForta = cs => cs.reduce((a, b) => forçaCarta(a) >= forçaCarta(b) ? a : b);
+const mésFeble = cs => cs.reduce((a, b) => forçaCarta(a) <= forçaCarta(b) ? a : b);
 
 const millorATaula = (trick, trumf) => {
   let m = null;
@@ -230,10 +230,10 @@ const millorATaula = (trick, trumf) => {
 };
 
 const hCant = (ma, trumf, maxN) => {
-  const llindar = ORDRE_FORCA.length / 2;
+  const llindar = ORDRE_FORÇA.length / 2;
   let e = 0;
   for (const c of ma) {
-    if (c.pal === trumf) e += forcaCarta(c) > llindar ? 1 : 0.3;
+    if (c.pal === trumf) e += forçaCarta(c) > llindar ? 1 : 0.3;
     else if (c.valor === 1) e += 0.9;
     else if (c.valor === 3) e += 0.6;
     else if (c.valor === 12) e += 0.3;
@@ -244,13 +244,13 @@ const hCant = (ma, trumf, maxN) => {
 const hJuga = (ma, trick, trumf, cantada, fetes, llegals) => {
   const necessito = cantada - fetes;
   const millor = millorATaula(trick, trumf);
-  if (!trick.length) return necessito > 0 ? mesForta(llegals) : mesFeble(llegals);
+  if (!trick.length) return necessito > 0 ? mésForta(llegals) : mésFeble(llegals);
   const guanyen = llegals.filter(c => supera(c, millor, trumf));
-  const mÃ­nG = guanyen.length ? mesFeble(guanyen) : null;
-  return necessito > 0 ? (mÃ­nG || mesFeble(llegals)) : mesFeble(llegals);
+  const mínG = guanyen.length ? mésFeble(guanyen) : null;
+  return necessito > 0 ? (mínG || mésFeble(llegals)) : mésFeble(llegals);
 };
 
-// â•â• ISMCTS (JS) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══ ISMCTS (JS) ════════════════════════════════════════════════════════════
 
 function shuffleArr(arr) {
   const a = [...arr];
@@ -282,10 +282,10 @@ function cartaHeuristicaSim(s, pi) {
   const millor   = millorATaula(taula, trump);
   const llegals  = jugadesLegals(ma, palObert, millor, trump);
   const necessito = cantada - fetes;
-  if (!taula.length) return necessito > 0 ? mÃ©sForta(llegals) : mÃ©sFeble(llegals);
+  if (!taula.length) return necessito > 0 ? mésForta(llegals) : mésFeble(llegals);
   const guanyen = llegals.filter(c => supera(c, millor, trump));
-  const minG = guanyen.length ? mÃ©sFeble(guanyen) : null;
-  return necessito > 0 ? (minG || mÃ©sFeble(llegals)) : mÃ©sFeble(llegals);
+  const minG = guanyen.length ? mésFeble(guanyen) : null;
+  return necessito > 0 ? (minG || mésFeble(llegals)) : mésFeble(llegals);
 }
 
 function resolMaSim(s) {
@@ -409,21 +409,21 @@ function mcBidJS(game, playerIdx, nSims = 150) {
 }
 
 
-// â•â• InferÃ¨ncia RL (MLP en JavaScript pur) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══ Inferència RL (MLP en JavaScript pur) ════════════════════════════════════
 // Els pesos es carreguen des de pesos_rl.json exportat amb agents/exporta_pesos.py
 
 function matVecMul(W, b, x) {
-  // W: [out, in], b: [out], x: [in] â†’ [out]
+  // W: [out, in], b: [out], x: [in] → [out]
   return W.map((row, i) => row.reduce((s, w, j) => s + w * x[j], 0) + b[i]);
 }
 
 function rlInfereix(obs, pesos, mask) {
-  // Forward pass: 161 â†’ 256 â†’ 256 â†’ 128 â†’ 40 (Tanh entre capes)
+  // Forward pass: 161 → 256 → 256 → 128 → 40 (Tanh entre capes)
   let h = matVecMul(pesos.l1_w, pesos.l1_b, obs).map(Math.tanh);
   h     = matVecMul(pesos.l2_w, pesos.l2_b, h).map(Math.tanh);
   h     = matVecMul(pesos.l3_w, pesos.l3_b, h).map(Math.tanh);
   const logits = matVecMul(pesos.out_w, pesos.out_b, h);
-  // Apliquem la mÃ scara i triem el millor
+  // Apliquem la màscara i triem el millor
   let best = -1, bestVal = -Infinity;
   logits.forEach((v, i) => {
     if (mask[i] && v > bestVal) { bestVal = v; best = i; }
@@ -435,15 +435,37 @@ function rlInfereix(obs, pesos, mask) {
 let RL_PESOS = null;
 
 
-// ObservaciÃ³ simplificada per al bot RL al React
-// (equivalent a agents/observacio.py perÃ² en JS)
-const ORDRE_FORCA_RL = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
+// Observació simplificada per al bot RL al React
+// (equivalent a agents/observacio.py però en JS)
+const ORDRE_FORÇA_RL = [1, 3, 12, 11, 10, 7, 6, 5, 4, 2];
 const PALS_RL = ["Ors", "Copes", "Espases", "Bastos"];
 
-function forcaIdx(carta) {
-  return PALS_RL.indexOf(carta.pal) * 10 + ORDRE_FORCA_RL.indexOf(carta.valor);
+function forçaIdx(carta) {
+  return PALS_RL.indexOf(carta.pal) * 10 + ORDRE_FORÇA_RL.indexOf(carta.valor);
 }
 
 function construeixObsRL(state, pi) {
   const { hands, trump, trick, bids, taken, rounds, roundIdx, scores,
-          trickLeader, players, cartesJugades = [], buits = {} } = stat
+          trickLeader, players, cartesJugades = [], buits = {} } = state;
+  const n = players.length;
+  const nC = rounds[roundIdx];
+  const nR = rounds.length;
+  const prog = roundIdx / Math.max(nR - 1, 1);
+  const nCf  = nC || 1;
+  const obs  = new Float32Array(40 + 40 + 40 + 4 + 4 + 2 + 3 + 3 + 7*(n-1) + n).fill(0);
+  let off = 0;
+
+  // A: mà pròpia
+  (hands[pi] || []).forEach(c => { obs[off + forçaIdx(c)] = 1; }); off += 40;
+  // B: cartes jugades
+  (cartesJugades || []).forEach(c => { obs[off + forçaIdx(c)] = 1; }); off += 40;
+  // C: taula actual
+  trick.forEach(({ carta }) => { obs[off + forçaIdx(carta)] = 1; }); off += 40;
+  // D: pal obert
+  if (trick.length) obs[off + PALS_RL.indexOf(trick[0].carta.pal)] = 1; off += 4;
+  // E: trumfo
+  obs[off + PALS_RL.indexOf(trump)] = 1; off += 4;
+  // F: progrés
+  obs[off] = prog; obs[off+1] = nC / 8; off += 2;
+  // G: fase
+  obs[off + 
