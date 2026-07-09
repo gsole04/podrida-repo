@@ -172,15 +172,15 @@ function setupTutRound(state, rIdx) {
 }
 
 // â•â• Game Logic â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const forÃ§aCarta = c => ORDRE_FORÃ‡A.length - ORDRE_FORÃ‡A.indexOf(c.valor);
+const forcaCarta = c => ORDRE_FORCA.length - ORDRE_FORCA.indexOf(c.valor);
 const cardKey = c => `${c.pal}-${c.valor}`;
 const cardsEq = (a, b) => a && b && a.pal === b.pal && a.valor === b.valor;
 const removeCard = (hand, carta) => hand.filter(c => !cardsEq(c, carta));
 
 const construeixBaralla = n => {
   const nTreure = (5 - n) * 2;
-  const excl = nTreure > 0 ? new Set(ORDRE_FORÃ‡A.slice(-nTreure)) : new Set();
-  const vals = ORDRE_FORÃ‡A.filter(v => !excl.has(v));
+  const excl = nTreure > 0 ? new Set(ORDRE_FORCA.slice(-nTreure)) : new Set();
+  const vals = ORDRE_FORCA.filter(v => !excl.has(v));
   return PALS.flatMap(pal => vals.map(valor => ({ pal, valor })));
 };
 
@@ -199,7 +199,7 @@ const supera = (c, millor, trumf) => {
   if (ct && !mt) return true;
   if (mt && !ct) return false;
   if (c.pal !== millor.pal) return false;
-  return forÃ§aCarta(c) > forÃ§aCarta(millor);
+  return forcaCarta(c) > forcaCarta(millor);
 };
 
 const jugadesLegals = (ma, palObert, millor, trumf) => {
@@ -220,8 +220,8 @@ const seqRondes = n => [
 ];
 
 // â•â• AI Heuristic â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const mÃ©sForta = cs => cs.reduce((a, b) => forÃ§aCarta(a) >= forÃ§aCarta(b) ? a : b);
-const mÃ©sFeble = cs => cs.reduce((a, b) => forÃ§aCarta(a) <= forÃ§aCarta(b) ? a : b);
+const mesForta = cs => cs.reduce((a, b) => forcaCarta(a) >= forcaCarta(b) ? a : b);
+const mesFeble = cs => cs.reduce((a, b) => forcaCarta(a) <= forcaCarta(b) ? a : b);
 
 const millorATaula = (trick, trumf) => {
   let m = null;
@@ -230,10 +230,10 @@ const millorATaula = (trick, trumf) => {
 };
 
 const hCant = (ma, trumf, maxN) => {
-  const llindar = ORDRE_FORÃ‡A.length / 2;
+  const llindar = ORDRE_FORCA.length / 2;
   let e = 0;
   for (const c of ma) {
-    if (c.pal === trumf) e += forÃ§aCarta(c) > llindar ? 1 : 0.3;
+    if (c.pal === trumf) e += forcaCarta(c) > llindar ? 1 : 0.3;
     else if (c.valor === 1) e += 0.9;
     else if (c.valor === 3) e += 0.6;
     else if (c.valor === 12) e += 0.3;
@@ -244,10 +244,10 @@ const hCant = (ma, trumf, maxN) => {
 const hJuga = (ma, trick, trumf, cantada, fetes, llegals) => {
   const necessito = cantada - fetes;
   const millor = millorATaula(trick, trumf);
-  if (!trick.length) return necessito > 0 ? mÃ©sForta(llegals) : mÃ©sFeble(llegals);
+  if (!trick.length) return necessito > 0 ? mesForta(llegals) : mesFeble(llegals);
   const guanyen = llegals.filter(c => supera(c, millor, trumf));
-  const mÃ­nG = guanyen.length ? mÃ©sFeble(guanyen) : null;
-  return necessito > 0 ? (mÃ­nG || mÃ©sFeble(llegals)) : mÃ©sFeble(llegals);
+  const mÃ­nG = guanyen.length ? mesFeble(guanyen) : null;
+  return necessito > 0 ? (mÃ­nG || mesFeble(llegals)) : mesFeble(llegals);
 };
 
 // â•â• ISMCTS (JS) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
