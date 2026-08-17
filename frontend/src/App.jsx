@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { crearSala, unirSala, escoltaSala, iniciaPartida, publicaEstat, enviaAccio, netejaAccio } from "./multiplayer";
 
 // ══ Constants ═══════════════════════════════════════════════════════════════
 const PALS = ["Ors", "Copes", "Espases", "Bastos"];
@@ -766,7 +767,7 @@ function Toggle({ value, onChange, label, desc }) {
   );
 }
 
-function MenuScreen({ onPlay, onTutorial }) {
+function MenuScreen({ onPlay, onTutorial, onMultiplayer }) {
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
       <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "36px 40px", textAlign: "center", color: "white", width: "min(360px, 90vw)" }}>
@@ -780,6 +781,13 @@ function MenuScreen({ onPlay, onTutorial }) {
           color: "#c9a84c", fontSize: 19, cursor: "pointer",
           fontFamily: "Georgia,serif", letterSpacing: 2,
         }}>▶ Juga</button>
+
+        <button onClick={onMultiplayer} style={{
+          width: "100%", padding: "14px 0", borderRadius: 12, marginTop: 12,
+          border: "1px solid #2a5a8a", background: "rgba(76,131,175,0.08)",
+          color: "#5a9ac9", fontSize: 16, cursor: "pointer",
+          fontFamily: "Georgia,serif", letterSpacing: 1,
+        }}>🌐 Multijugador</button>
 
         <button onClick={onTutorial} style={{
           width: "100%", padding: "14px 0", borderRadius: 12, marginTop: 12,
@@ -867,6 +875,114 @@ function SetupScreen({ onStart, onBack }) {
   );
 }
 
+// ══ Multijugador: menú, unir-se, sala d'espera ═════════════════════════════
+function ShellCard({ children }) {
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
+      <div style={{ background: "rgba(0,0,0,0.72)", border: "1px solid #2a5a3a", borderRadius: 20, padding: "32px 40px", textAlign: "center", color: "white", width: "min(360px, 90vw)" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function BackHeader({ onBack, title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
+      <button onClick={onBack} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#666", cursor: "pointer", fontSize: 12 }}>← Enrere</button>
+      <span style={{ flex: 1, color: "#aaa", fontSize: 14, fontFamily: "Georgia,serif", letterSpacing: 1 }}>{title}</span>
+    </div>
+  );
+}
+
+function MultiplayerMenuScreen({ onCreate, onJoin, onBack }) {
+  return (
+    <ShellCard>
+      <BackHeader onBack={onBack} title="Multijugador" />
+      <button onClick={onCreate} style={{
+        width: "100%", padding: "14px 0", borderRadius: 12,
+        border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+        color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+      }}>Crear una sala</button>
+      <button onClick={onJoin} style={{
+        width: "100%", padding: "14px 0", borderRadius: 12, marginTop: 12,
+        border: "1px solid #2a5a8a", background: "rgba(76,131,175,0.08)",
+        color: "#5a9ac9", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+      }}>Unir-me a una sala</button>
+    </ShellCard>
+  );
+}
+
+function JoinRoomScreen({ onJoin, onBack, busy, error }) {
+  const [code, setCode] = useState("");
+  const [nom, setNom] = useState("");
+  return (
+    <ShellCard>
+      <BackHeader onBack={onBack} title="Unir-me a una sala" />
+      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Codi de sala</p>
+      <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0, 4))}
+        placeholder="ABCD" style={{
+          width: "100%", boxSizing: "border-box", textAlign: "center", letterSpacing: 6,
+          padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
+          color: "#c9a84c", fontSize: 22, fontFamily: "Georgia,serif", marginBottom: 16,
+        }} />
+      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
+      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))}
+        placeholder="Nom" style={{
+          width: "100%", boxSizing: "border-box", textAlign: "center",
+          padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
+          color: "white", fontSize: 16, marginBottom: 16,
+        }} />
+      {error && <p style={{ color: "#ef5350", fontSize: 12, marginBottom: 12 }}>{error}</p>}
+      <button disabled={busy || code.length !== 4 || !nom.trim()} onClick={() => onJoin(code, nom.trim())} style={{
+        width: "100%", padding: "13px 0", borderRadius: 12,
+        border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+        color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+        opacity: busy || code.length !== 4 || !nom.trim() ? 0.5 : 1,
+      }}>{busy ? "Connectant…" : "Unir-me"}</button>
+    </ShellCard>
+  );
+}
+
+function LobbyScreen({ code, n, seats, isHost, mySeat, onStart, onBack, busy }) {
+  const slots = Array.from({ length: n }, (_, i) => seats?.[i] || null);
+  const joined = slots.filter(Boolean).length;
+  return (
+    <ShellCard>
+      <BackHeader onBack={onBack} title="Sala d'espera" />
+      <p style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>Codi de la sala</p>
+      <div style={{ fontSize: 34, letterSpacing: 8, color: "#c9a84c", fontFamily: "Georgia,serif", marginBottom: 20 }}>{code}</div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+        {slots.map((s, i) => (
+          <div key={i} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "9px 14px", borderRadius: 10,
+            border: `1px solid ${s ? "#c9a84c44" : "#2a2a2a"}`,
+            background: s ? "rgba(201,168,76,0.08)" : "transparent",
+          }}>
+            <span style={{ color: s ? "white" : "#555", fontSize: 14 }}>
+              {s ? s.name : "Buit (serà un bot)"}{i === mySeat ? " · Tu" : ""}
+            </span>
+            {s && <span style={{ color: "#4CAF50", fontSize: 11 }}>●</span>}
+          </div>
+        ))}
+      </div>
+
+      {isHost ? (
+        <button disabled={busy} onClick={onStart} style={{
+          width: "100%", padding: "13px 0", borderRadius: 12,
+          border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+          color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+          opacity: busy ? 0.5 : 1,
+        }}>{joined < n ? `Comença (${n - joined} seient${n - joined > 1 ? "s" : ""} amb bot)` : "Comença la partida"}</button>
+      ) : (
+        <p style={{ color: "#666", fontSize: 13 }}>Esperant que l'amfitrió comenci…</p>
+      )}
+    </ShellCard>
+  );
+}
+
 // ══ Round End Overlay ══════════════════════════════════════════════════════
 function RoundEndOverlay({ game, onNext }) {
   const { players, scores, bids, taken, roundIdx, phase, roundScores } = game;
@@ -904,12 +1020,13 @@ function RoundEndOverlay({ game, onNext }) {
 }
 
 // ══ Game Screen ════════════════════════════════════════════════════════════
-function GameScreen({ game, setGame, onRestart }) {
+function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRound }) {
   const { players, scores, phase, trump, trumpCard, bids, taken, trick, rounds, roundIdx, hands, curBidder, curPlayer, selected, trickWinner, startIdx, rules = {} } = game;
   const isRondaIndia = rules.rondesIndia && roundIdx === rounds.length - 1;
   const n = players.length;
   const nC = rounds[roundIdx];
-  const humanIdx = players.findIndex(p => p.isHuman);
+  // Offline: el jugador humà (n'hi ha un). Online: el seient que controla aquest client.
+  const humanIdx = mySeat ?? players.findIndex(p => p.isHuman);
   const humanHand = hands[humanIdx] || [];
   const ps = PAL_STYLE[trump] || {};
 
@@ -985,7 +1102,8 @@ function GameScreen({ game, setGame, onRestart }) {
     }
     if (!legalKeys.has(cardKey(carta))) return;
     if (cardsEq(selected, carta)) {
-      setGame(g => doPlay({ ...g, selected: null }, carta));
+      if (onPlay) { onPlay(carta); setGame(g => ({ ...g, selected: null })); }
+      else setGame(g => doPlay({ ...g, selected: null }, carta));
     } else {
       setGame(g => ({ ...g, selected: carta }));
     }
@@ -1003,10 +1121,13 @@ function GameScreen({ game, setGame, onRestart }) {
       });
       return;
     }
-    setGame(g => doBid(g, bid));
+    if (onBid) onBid(bid);
+    else setGame(g => doBid(g, bid));
   };
 
-  const opponents = players.map((p, i) => ({ ...p, idx: i })).filter(p => !p.isHuman);
+  // "Oponents" = tots els seients excepte el meu (no els "no humans": en línia
+  // hi pot haver diversos jugadors humans, i cadascun veu els altres de cara avall).
+  const opponents = players.map((p, i) => ({ ...p, idx: i })).filter(p => p.idx !== humanIdx);
 
   const isHumanTurn = phase === PHASE.PLAY && curPlayer === humanIdx;
   const isHumanBidding = phase === PHASE.BID && curBidder === humanIdx;
@@ -1246,6 +1367,7 @@ function GameScreen({ game, setGame, onRestart }) {
       {(phase === PHASE.ROUND_END || phase === PHASE.GAME_END) && !game.isTutorial && (
         <RoundEndOverlay game={game} onNext={() => {
           if (phase === PHASE.GAME_END) { onRestart(); return; }
+          if (onNextRound) { onNextRound(); return; }
           setGame(g => setupRound({
             ...g,
             roundIdx: g.roundIdx + 1,
@@ -1261,10 +1383,97 @@ function GameScreen({ game, setGame, onRestart }) {
 export default function App() {
   const [game, setGame] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState('menu'); // 'menu' | 'configure'
+  const [view, setView] = useState('menu'); // 'menu' | 'configure' | 'mp-menu' | 'mp-create' | 'mp-join' | 'mp-lobby'
+
+  // ── Multijugador ──────────────────────────────────────────────────────
+  const [online, setOnline] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [roomCode, setRoomCode] = useState(null);
+  const [mySeat, setMySeat] = useState(null);
+  const [room, setRoom] = useState(null); // últim snapshot de la sala (seients, started...)
+  const [mpBusy, setMpBusy] = useState(false);
+  const [mpError, setMpError] = useState(null);
+
+  const resetAll = () => {
+    setGame(null); setView('menu');
+    setOnline(false); setIsHost(false); setRoomCode(null); setMySeat(null); setRoom(null); setMpError(null);
+  };
+
+  const handleCreateRoom = async (n, botType, rules) => {
+    setMpBusy(true); setMpError(null);
+    try {
+      const { code, mySeat: seat } = await crearSala({ n, botType, rules, nom: "Tu" });
+      setRoomCode(code); setMySeat(seat); setIsHost(true); setOnline(true);
+      setView('mp-lobby');
+    } catch (e) { setMpError(e.message || "No s'ha pogut crear la sala"); }
+    setMpBusy(false);
+  };
+
+  const handleJoinRoom = async (code, nom) => {
+    setMpBusy(true); setMpError(null);
+    try {
+      const { mySeat: seat } = await unirSala(code, nom);
+      setRoomCode(code); setMySeat(seat); setIsHost(false); setOnline(true);
+      setView('mp-lobby');
+    } catch (e) { setMpError(e.message || "No s'ha pogut unir a la sala"); }
+    setMpBusy(false);
+  };
+
+  const handleStartOnline = () => {
+    if (!room) return;
+    const { n, botType, rules, seats = {} } = room;
+    const players = Array.from({ length: n }, (_, i) =>
+      seats[i]
+        ? { name: seats[i].name, isHuman: true, botType: null }
+        : { name: `Bot ${i + 1}`, isHuman: false, botType }
+    );
+    const initial = setupRound({
+      players,
+      scores: Object.fromEntries(players.map((_, i) => [i, 0])),
+      rounds: seqRondes(n),
+      roundIdx: 0,
+      startIdx: Math.floor(Math.random() * n),
+      rules: rules || {},
+    });
+    setGame(initial);
+    iniciaPartida(roomCode, initial);
+  };
+
+  // Escolta contínua de la sala: mostra qui s'ha unit a la sala d'espera,
+  // rep l'estat quan l'amfitrió engega la partida (convidats), i aplica
+  // les jugades pendents dels convidats (només l'amfitrió).
+  useEffect(() => {
+    if (!roomCode) return;
+    const unsub = escoltaSala(roomCode, (data) => {
+      if (!data) return;
+      setRoom(data);
+      if (!isHost && data.started && data.state) setGame(data.state);
+      if (isHost && data.pendingAction) {
+        setGame(g => {
+          if (!g) return g;
+          const a = data.pendingAction;
+          if (a.type === 'bid' && g.phase === PHASE.BID && g.curBidder === a.seat) return doBid(g, a.bid);
+          if (a.type === 'play' && g.phase === PHASE.PLAY && g.curPlayer === a.seat) return doPlay(g, a.carta);
+          if (a.type === 'nextRound' && g.phase === PHASE.ROUND_END) {
+            return setupRound({ ...g, roundIdx: g.roundIdx + 1, startIdx: (g.startIdx + 1) % g.players.length });
+          }
+          return g;
+        });
+        netejaAccio(roomCode);
+      }
+    });
+    return unsub;
+  }, [roomCode, isHost]);
+
+  // Només l'amfitrió publica l'estat a Firebase (font de veritat única).
+  useEffect(() => {
+    if (!online || !isHost || !roomCode || !game) return;
+    publicaEstat(roomCode, game);
+  }, [game, online, isHost, roomCode]);
 
   useEffect(() => {
     if (!game || busy) return;
+    if (online && !isHost) return; // els convidats no executen el motor, només en reben l'estat
     const { phase, curBidder, curPlayer, players } = game;
 
     // Tutorial: detect pause triggers
@@ -1410,7 +1619,27 @@ export default function App() {
     }, 0));
   };
 
-  if (!game && view === 'menu') return <MenuScreen onPlay={() => setView('configure')} onTutorial={handleTutorialStart} />;
-  if (!game) return <SetupScreen onStart={handleStart} onBack={() => setView('menu')} />;
-  return <GameScreen game={game} setGame={setGame} onRestart={() => { setGame(null); setView('menu'); }} />;
+  if (!game) {
+    if (view === 'menu') return <MenuScreen onPlay={() => setView('configure')} onTutorial={handleTutorialStart} onMultiplayer={() => setView('mp-menu')} />;
+    if (view === 'mp-menu') return <MultiplayerMenuScreen onCreate={() => setView('mp-create')} onJoin={() => setView('mp-join')} onBack={() => setView('menu')} />;
+    if (view === 'mp-create') return <SetupScreen onStart={handleCreateRoom} onBack={() => setView('mp-menu')} />;
+    if (view === 'mp-join') return <JoinRoomScreen onJoin={handleJoinRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
+    if (view === 'mp-lobby') return <LobbyScreen code={roomCode} n={room?.n || 0} seats={room?.seats} isHost={isHost} mySeat={mySeat} onStart={handleStartOnline} onBack={resetAll} busy={mpBusy} />;
+    return <SetupScreen onStart={handleStart} onBack={() => setView('menu')} />;
+  }
+
+  const onlineHandlers = online ? {
+    mySeat,
+    onBid: (bid) => isHost
+      ? setGame(g => doBid(g, bid))
+      : enviaAccio(roomCode, { type: 'bid', seat: mySeat, bid }),
+    onPlay: (carta) => isHost
+      ? setGame(g => doPlay(g, carta))
+      : enviaAccio(roomCode, { type: 'play', seat: mySeat, carta }),
+    onNextRound: () => isHost
+      ? setGame(g => setupRound({ ...g, roundIdx: g.roundIdx + 1, startIdx: (g.startIdx + 1) % g.players.length }))
+      : enviaAccio(roomCode, { type: 'nextRound', seat: mySeat }),
+  } : {};
+
+  return <GameScreen game={game} setGame={setGame} onRestart={resetAll} {...onlineHandlers} />;
 }
