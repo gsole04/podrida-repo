@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { crearSala, unirSala, escoltaSala, iniciaPartida, publicaEstat, enviaAccio, netejaAccio } from "./multiplayer";
+import { crearSala, unirSala, unirSalaPublica, escoltaSala, actualitzaSlot, iniciaPartida, publicaEstat, enviaAccio, netejaAccio } from "./multiplayer";
 
 // ══ Constants ═══════════════════════════════════════════════════════════════
 const PALS = ["Ors", "Copes", "Espases", "Bastos"];
@@ -875,7 +875,7 @@ function SetupScreen({ onStart, onBack }) {
   );
 }
 
-// ══ Multijugador: menú, unir-se, sala d'espera ═════════════════════════════
+// ══ Multijugador: menú, crear, unir-se, sala d'espera ══════════════════════
 function ShellCard({ children }) {
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 60%, #1a472a 0%, #0a1f10 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
@@ -895,6 +895,19 @@ function BackHeader({ onBack, title }) {
   );
 }
 
+const segBtnStyle = (active) => ({
+  flex: 1, padding: "10px 0", borderRadius: 10,
+  border: `1px solid ${active ? "#c9a84c" : "#2a2a2a"}`,
+  background: active ? "rgba(201,168,76,0.12)" : "transparent",
+  color: active ? "#c9a84c" : "#666", fontSize: 13, cursor: "pointer", fontFamily: "Georgia,serif",
+});
+
+const textInputStyle = {
+  width: "100%", boxSizing: "border-box", textAlign: "center",
+  padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
+  color: "white", fontSize: 16, marginBottom: 16,
+};
+
 function MultiplayerMenuScreen({ onCreate, onJoin, onBack }) {
   return (
     <ShellCard>
@@ -913,69 +926,143 @@ function MultiplayerMenuScreen({ onCreate, onJoin, onBack }) {
   );
 }
 
-function JoinRoomScreen({ onJoin, onBack, busy, error }) {
-  const [code, setCode] = useState("");
+function CreateRoomScreen({ onCreate, onBack, busy, error }) {
   const [nom, setNom] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
+  const [prohibitQuadrar, setProhibitQuadrar] = useState(false);
+  const [rondesIndia, setRondesIndia] = useState(false);
   return (
     <ShellCard>
-      <BackHeader onBack={onBack} title="Unir-me a una sala" />
-      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Codi de sala</p>
-      <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0, 4))}
-        placeholder="ABCD" style={{
-          width: "100%", boxSizing: "border-box", textAlign: "center", letterSpacing: 6,
-          padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
-          color: "#c9a84c", fontSize: 22, fontFamily: "Georgia,serif", marginBottom: 16,
-        }} />
+      <BackHeader onBack={onBack} title="Crear sala" />
       <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
-      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))}
-        placeholder="Nom" style={{
-          width: "100%", boxSizing: "border-box", textAlign: "center",
-          padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
-          color: "white", fontSize: 16, marginBottom: 16,
-        }} />
+      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))} placeholder="Nom" style={textInputStyle} />
+
+      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Visibilitat</p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setIsPublic(false)} style={segBtnStyle(!isPublic)}>🔒 Privada</button>
+        <button onClick={() => setIsPublic(true)} style={segBtnStyle(isPublic)}>🌐 Pública</button>
+      </div>
+
+      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Regles especials</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+        <Toggle value={prohibitQuadrar} onChange={setProhibitQuadrar} label="Prohibit quadrar" desc="L'últim en parlar no pot igualar el total de mans" />
+        <Toggle value={rondesIndia} onChange={setRondesIndia} label="Última ronda índia" desc="En l'última ronda veus les cartes dels altres però no la teva" />
+      </div>
+
       {error && <p style={{ color: "#ef5350", fontSize: 12, marginBottom: 12 }}>{error}</p>}
-      <button disabled={busy || code.length !== 4 || !nom.trim()} onClick={() => onJoin(code, nom.trim())} style={{
+      <button disabled={busy || !nom.trim()} onClick={() => onCreate(nom.trim(), isPublic, { prohibitQuadrar, rondesIndia })} style={{
         width: "100%", padding: "13px 0", borderRadius: 12,
         border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
         color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-        opacity: busy || code.length !== 4 || !nom.trim() ? 0.5 : 1,
-      }}>{busy ? "Connectant…" : "Unir-me"}</button>
+        opacity: busy || !nom.trim() ? 0.5 : 1,
+      }}>{busy ? "Creant…" : "Crear sala"}</button>
     </ShellCard>
   );
 }
 
-function LobbyScreen({ code, n, seats, isHost, mySeat, onStart, onBack, busy }) {
-  const slots = Array.from({ length: n }, (_, i) => seats?.[i] || null);
-  const joined = slots.filter(Boolean).length;
+function JoinRoomScreen({ onJoinCode, onJoinPublic, onBack, busy, error }) {
+  const [mode, setMode] = useState('code'); // 'code' | 'public'
+  const [code, setCode] = useState("");
+  const [nom, setNom] = useState("");
+  const canSubmit = nom.trim() && (mode === 'public' || code.length === 4);
+  return (
+    <ShellCard>
+      <BackHeader onBack={onBack} title="Unir-me a una sala" />
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setMode('code')} style={segBtnStyle(mode === 'code')}>🔒 Amb codi</button>
+        <button onClick={() => setMode('public')} style={segBtnStyle(mode === 'public')}>🌐 Partida ràpida</button>
+      </div>
+      {mode === 'code' && (
+        <>
+          <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Codi de sala</p>
+          <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0, 4))}
+            placeholder="ABCD" style={{
+              width: "100%", boxSizing: "border-box", textAlign: "center", letterSpacing: 6,
+              padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
+              color: "#c9a84c", fontSize: 22, fontFamily: "Georgia,serif", marginBottom: 16,
+            }} />
+        </>
+      )}
+      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
+      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))} placeholder="Nom" style={textInputStyle} />
+      {error && <p style={{ color: "#ef5350", fontSize: 12, marginBottom: 12 }}>{error}</p>}
+      <button disabled={busy || !canSubmit} onClick={() => mode === 'code' ? onJoinCode(code, nom.trim()) : onJoinPublic(nom.trim())} style={{
+        width: "100%", padding: "13px 0", borderRadius: 12,
+        border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+        color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+        opacity: busy || !canSubmit ? 0.5 : 1,
+      }}>{busy ? "Connectant…" : mode === 'code' ? "Unir-me" : "Buscar partida"}</button>
+    </ShellCard>
+  );
+}
+
+const DIFF_ORDER = ['random', 'heuristic', 'ismcts'];
+
+function SlotRow({ i, slot, mySlot, isHost, onCycleType, onCycleDiff }) {
+  const s = slot || { type: 'open' };
+  const isMe = i === mySlot;
+  const botLabel = BOT_TYPES.find(b => b.id === s.botType)?.label || 'Heurístic';
+  const label = s.type === 'human' ? s.name
+    : s.type === 'bot' ? `🤖 Bot · ${botLabel}`
+    : s.type === 'closed' ? 'Tancat'
+    : 'Obert';
+  const editable = isHost && s.type !== 'human';
+  const miniBtn = {
+    padding: "5px 9px", borderRadius: 8, border: "1px solid #333",
+    background: "transparent", color: "#aaa", fontSize: 12, cursor: "pointer",
+  };
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: "9px 14px", borderRadius: 10,
+      border: `1px solid ${s.type === 'human' ? "#c9a84c44" : "#2a2a2a"}`,
+      background: s.type === 'human' ? "rgba(201,168,76,0.08)" : "transparent",
+    }}>
+      <span style={{ color: s.type === 'closed' ? "#444" : s.type === 'open' ? "#777" : "white", fontSize: 14 }}>
+        {label}{isMe ? " · Tu" : ""}
+      </span>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {editable && s.type === 'bot' && (
+          <button onClick={() => onCycleDiff(i)} style={miniBtn} title="Canvia dificultat">🔄</button>
+        )}
+        {editable && (
+          <button onClick={() => onCycleType(i)} style={miniBtn}>
+            {s.type === 'open' ? '🤖' : s.type === 'bot' ? '✕' : '↺'}
+          </button>
+        )}
+        {s.type === 'human' && <span style={{ color: "#4CAF50", fontSize: 11 }}>●</span>}
+      </div>
+    </div>
+  );
+}
+
+function LobbyScreen({ code, room, isHost, mySlot, onCycleType, onCycleDiff, onStart, onBack, busy }) {
+  const slots = Array.from({ length: 5 }, (_, i) => room?.slots?.[i] || { type: 'open' });
+  const activeCount = slots.filter(s => s.type !== 'closed').length;
+  const canStart = activeCount >= 3;
   return (
     <ShellCard>
       <BackHeader onBack={onBack} title="Sala d'espera" />
       <p style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>Codi de la sala</p>
-      <div style={{ fontSize: 34, letterSpacing: 8, color: "#c9a84c", fontFamily: "Georgia,serif", marginBottom: 20 }}>{code}</div>
+      <div style={{ fontSize: 34, letterSpacing: 8, color: "#c9a84c", fontFamily: "Georgia,serif", marginBottom: 6 }}>{code}</div>
+      {room?.public && <p style={{ color: "#5a9ac9", fontSize: 11, marginBottom: 14 }}>🌐 Sala pública</p>}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
         {slots.map((s, i) => (
-          <div key={i} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "9px 14px", borderRadius: 10,
-            border: `1px solid ${s ? "#c9a84c44" : "#2a2a2a"}`,
-            background: s ? "rgba(201,168,76,0.08)" : "transparent",
-          }}>
-            <span style={{ color: s ? "white" : "#555", fontSize: 14 }}>
-              {s ? s.name : "Buit (serà un bot)"}{i === mySeat ? " · Tu" : ""}
-            </span>
-            {s && <span style={{ color: "#4CAF50", fontSize: 11 }}>●</span>}
-          </div>
+          <SlotRow key={i} i={i} slot={s} mySlot={mySlot} isHost={isHost} onCycleType={onCycleType} onCycleDiff={onCycleDiff} />
         ))}
       </div>
 
       {isHost ? (
-        <button disabled={busy} onClick={onStart} style={{
-          width: "100%", padding: "13px 0", borderRadius: 12,
-          border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
-          color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-          opacity: busy ? 0.5 : 1,
-        }}>{joined < n ? `Comença (${n - joined} seient${n - joined > 1 ? "s" : ""} amb bot)` : "Comença la partida"}</button>
+        <>
+          {!canStart && <p style={{ color: "#EF9A9A", fontSize: 12, marginBottom: 8 }}>Calen almenys 3 jugadors actius (obre un seient o posa-hi un bot)</p>}
+          <button disabled={busy || !canStart} onClick={onStart} style={{
+            width: "100%", padding: "13px 0", borderRadius: 12,
+            border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+            color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+            opacity: busy || !canStart ? 0.5 : 1,
+          }}>{busy ? "Iniciant…" : "Comença la partida"}</button>
+        </>
       ) : (
         <p style={{ color: "#666", fontSize: 13 }}>Esperant que l'amfitrió comenci…</p>
       )}
@@ -1389,21 +1476,24 @@ export default function App() {
   const [online, setOnline] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [roomCode, setRoomCode] = useState(null);
-  const [mySeat, setMySeat] = useState(null);
-  const [room, setRoom] = useState(null); // últim snapshot de la sala (seients, started...)
+  const [myUid, setMyUid] = useState(null);
+  const [mySlot, setMySlot] = useState(null);   // seient (0-4) assignat en unir-se, per a la sala d'espera
+  const [mySeat, setMySeat] = useState(null);   // índex final al `game.players` un cop comença la partida
+  const [room, setRoom] = useState(null);       // últim snapshot de la sala (seients, started...)
   const [mpBusy, setMpBusy] = useState(false);
   const [mpError, setMpError] = useState(null);
 
   const resetAll = () => {
     setGame(null); setView('menu');
-    setOnline(false); setIsHost(false); setRoomCode(null); setMySeat(null); setRoom(null); setMpError(null);
+    setOnline(false); setIsHost(false); setRoomCode(null);
+    setMyUid(null); setMySlot(null); setMySeat(null); setRoom(null); setMpError(null);
   };
 
-  const handleCreateRoom = async (n, botType, rules) => {
+  const handleCreateRoom = async (nom, isPublic, rules) => {
     setMpBusy(true); setMpError(null);
     try {
-      const { code, mySeat: seat } = await crearSala({ n, botType, rules, nom: "Tu" });
-      setRoomCode(code); setMySeat(seat); setIsHost(true); setOnline(true);
+      const { code, mySlot: slot, uid } = await crearSala({ nom, public: isPublic, rules });
+      setRoomCode(code); setMyUid(uid); setMySlot(slot); setMySeat(0); setIsHost(true); setOnline(true);
       setView('mp-lobby');
     } catch (e) { setMpError(e.message || "No s'ha pogut crear la sala"); }
     setMpBusy(false);
@@ -1412,31 +1502,61 @@ export default function App() {
   const handleJoinRoom = async (code, nom) => {
     setMpBusy(true); setMpError(null);
     try {
-      const { mySeat: seat } = await unirSala(code, nom);
-      setRoomCode(code); setMySeat(seat); setIsHost(false); setOnline(true);
+      const { mySlot: slot, uid } = await unirSala(code, nom);
+      setRoomCode(code); setMyUid(uid); setMySlot(slot); setIsHost(false); setOnline(true);
       setView('mp-lobby');
     } catch (e) { setMpError(e.message || "No s'ha pogut unir a la sala"); }
     setMpBusy(false);
   };
 
+  const handleJoinPublic = async (nom) => {
+    setMpBusy(true); setMpError(null);
+    try {
+      const { code, mySlot: slot, uid } = await unirSalaPublica(nom);
+      setRoomCode(code); setMyUid(uid); setMySlot(slot); setIsHost(false); setOnline(true);
+      setView('mp-lobby');
+    } catch (e) { setMpError(e.message || "No s'ha pogut trobar una sala"); }
+    setMpBusy(false);
+  };
+
+  // Nomes l'amfitrió pot editar seients que encara no té ningú a dins.
+  const cycleSlotType = (i) => {
+    const cur = (room?.slots?.[i] || { type: 'open' }).type;
+    if (cur === 'human') return;
+    const next = cur === 'open' ? 'bot' : cur === 'bot' ? 'closed' : 'open';
+    actualitzaSlot(roomCode, i, next === 'bot' ? { type: 'bot', botType: 'heuristic' } : { type: next });
+  };
+  const cycleSlotDiff = (i) => {
+    const cur = room?.slots?.[i]?.botType || 'heuristic';
+    const next = DIFF_ORDER[(DIFF_ORDER.indexOf(cur) + 1) % DIFF_ORDER.length];
+    actualitzaSlot(roomCode, i, { type: 'bot', botType: next });
+  };
+
   const handleStartOnline = () => {
     if (!room) return;
-    const { n, botType, rules, seats = {} } = room;
-    const players = Array.from({ length: n }, (_, i) =>
-      seats[i]
-        ? { name: seats[i].name, isHuman: true, botType: null }
-        : { name: `Bot ${i + 1}`, isHuman: false, botType }
-    );
+    const slots = room.slots || {};
+    const active = [];
+    for (let i = 0; i < 5; i++) {
+      const s = slots[i] || { type: 'open' };
+      if (s.type !== 'closed') active.push(s);
+    }
+    if (active.length < 3) return;
+    const seatAssignment = {};
+    const players = active.map((s, idx) => {
+      if (s.type === 'human') { seatAssignment[s.uid] = idx; return { name: s.name, isHuman: true, botType: null }; }
+      return { name: `Bot ${idx + 1}`, isHuman: false, botType: s.botType || 'heuristic' };
+    });
     const initial = setupRound({
       players,
       scores: Object.fromEntries(players.map((_, i) => [i, 0])),
-      rounds: seqRondes(n),
+      rounds: seqRondes(players.length),
       roundIdx: 0,
-      startIdx: Math.floor(Math.random() * n),
-      rules: rules || {},
+      startIdx: Math.floor(Math.random() * players.length),
+      rules: room.rules || {},
     });
     setGame(initial);
-    iniciaPartida(roomCode, initial);
+    setMySeat(0); // l'amfitrió (seient 0) sempre queda primer un cop compactats els seients
+    iniciaPartida(roomCode, initial, seatAssignment);
   };
 
   // Escolta contínua de la sala: mostra qui s'ha unit a la sala d'espera,
@@ -1447,7 +1567,11 @@ export default function App() {
     const unsub = escoltaSala(roomCode, (data) => {
       if (!data) return;
       setRoom(data);
-      if (!isHost && data.started && data.state) setGame(data.state);
+      if (!isHost && data.started && data.state) {
+        const seat = data.seatAssignment?.[myUid];
+        if (seat != null) setMySeat(seat);
+        setGame(data.state);
+      }
       if (isHost && data.pendingAction) {
         setGame(g => {
           if (!g) return g;
@@ -1463,7 +1587,7 @@ export default function App() {
       }
     });
     return unsub;
-  }, [roomCode, isHost]);
+  }, [roomCode, isHost, myUid]);
 
   // Només l'amfitrió publica l'estat a Firebase (font de veritat única).
   useEffect(() => {
@@ -1622,9 +1746,9 @@ export default function App() {
   if (!game) {
     if (view === 'menu') return <MenuScreen onPlay={() => setView('configure')} onTutorial={handleTutorialStart} onMultiplayer={() => setView('mp-menu')} />;
     if (view === 'mp-menu') return <MultiplayerMenuScreen onCreate={() => setView('mp-create')} onJoin={() => setView('mp-join')} onBack={() => setView('menu')} />;
-    if (view === 'mp-create') return <SetupScreen onStart={handleCreateRoom} onBack={() => setView('mp-menu')} />;
-    if (view === 'mp-join') return <JoinRoomScreen onJoin={handleJoinRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
-    if (view === 'mp-lobby') return <LobbyScreen code={roomCode} n={room?.n || 0} seats={room?.seats} isHost={isHost} mySeat={mySeat} onStart={handleStartOnline} onBack={resetAll} busy={mpBusy} />;
+    if (view === 'mp-create') return <CreateRoomScreen onCreate={handleCreateRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
+    if (view === 'mp-join') return <JoinRoomScreen onJoinCode={handleJoinRoom} onJoinPublic={handleJoinPublic} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
+    if (view === 'mp-lobby') return <LobbyScreen code={roomCode} room={room} isHost={isHost} mySlot={mySlot} onCycleType={cycleSlotType} onCycleDiff={cycleSlotDiff} onStart={handleStartOnline} onBack={resetAll} busy={mpBusy} />;
     return <SetupScreen onStart={handleStart} onBack={() => setView('menu')} />;
   }
 

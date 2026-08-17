@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getDatabase, ref, set, get, update, onValue, off } from "firebase/database";
+import { getDatabase, ref, set, get, update, remove, onValue, off } from "firebase/database";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { firebaseConfig } from "./firebase";
 
@@ -31,7 +31,9 @@ function generaCodi() {
 // els elimina de manera segura sense haver de netejar el `game` a mà.
 const netejaJSON = (obj) => JSON.parse(JSON.stringify(obj));
 
-export async function crearSala({ n, botType, rules, nom }) {
+// Una sala sempre té 5 seients (índexs 0-4). El seient 0 és sempre l'amfitrió.
+// Cada seient és { type: 'human', name, uid } | { type: 'bot', botType } | { type: 'closed' } | { type: 'open' }.
+export async function crearSala({ nom, public: isPublic, rules }) {
   const uid = await ensureAuth();
   let code = generaCodi();
   for (let intent = 0; intent < 5; intent++) {
@@ -39,13 +41,18 @@ export async function crearSala({ n, botType, rules, nom }) {
     if (!snap.exists()) break;
     code = generaCodi();
   }
+  const slots = { 0: { type: "human", name: nom, uid } };
+  for (let i = 1; i < 5; i++) slots[i] = { type: "open" };
   await set(ref(db, `rooms/${code}`), {
-    hostUid: uid, n, botType, rules: rules || {},
-    seats: { 0: { name: nom, uid } },
+    hostUid: uid,
+    public: !!isPublic,
+    rules: rules || {},
+    slots,
     started: false,
     createdAt: Date.now(),
   });
-  return { code, mySeat: 0, uid };
+  if (isPublic) await set(ref(db, `publicRooms/${code}`), true);
+  return { code, mySlot: 0, uid };
 }
 
 export async function unirSala(code, nom) {
@@ -54,28 +61,45 @@ export async function unirSala(code, nom) {
   if (!snap.exists()) throw new Error("Sala no trobada");
   const room = snap.val();
   if (room.started) throw new Error("La partida ja ha començat");
-  const seats = room.seats || {};
+  const slots = room.slots || {};
   let seat = -1;
-  for (let i = 0; i < room.n; i++) if (!seats[i]) { seat = i; break; }
+  for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") { seat = i; break; }
   if (seat === -1) throw new Error("La sala és plena");
-  await set(ref(db, `rooms/${code}/seats/${seat}`), { name: nom, uid });
-  return { code, mySeat: seat, uid, n: room.n };
+  await set(ref(db, `rooms/${code}/slots/${seat}`), { type: "human", name: nom, uid });
+  return { code, mySlot: seat, uid };
 }
 
-// Escolta contínua de tota la sala: seients, si ha començat, i l'estat de joc.
+// Unir-se a la primera sala pública amb un seient obert (sense codi).
+export async function unirSalaPublica(nom) {
+  const snap = await get(ref(db, "publicRooms"));
+  const codes = snap.exists() ? Object.keys(snap.val()) : [];
+  for (const code of codes) {
+    try { return await unirSala(code, nom); } catch (e) { /* prova la següent sala */ }
+  }
+  throw new Error("No hi ha sales públiques obertes ara mateix");
+}
+
+// Escolta contínua de tota la sala: seients, si ha començat, l'estat de joc i les accions pendents.
 export function escoltaSala(code, cb) {
   const roomRef = ref(db, `rooms/${code}`);
   const listener = onValue(roomRef, (snap) => cb(snap.val()));
   return () => off(roomRef, "value", listener);
 }
 
-// Només l'amfitrió: engega la partida amb l'estat inicial ja calculat.
-export function iniciaPartida(code, gameState) {
-  return update(ref(db, `rooms/${code}`), {
+// Només l'amfitrió, a la sala d'espera: obre/tanca un seient o hi posa un bot.
+export function actualitzaSlot(code, i, slot) {
+  return set(ref(db, `rooms/${code}/slots/${i}`), slot);
+}
+
+// Només l'amfitrió: engega la partida amb l'estat inicial i el mapa de seients finals.
+export async function iniciaPartida(code, gameState, seatAssignment) {
+  await update(ref(db, `rooms/${code}`), {
     started: true,
     state: netejaJSON(gameState),
+    seatAssignment: seatAssignment || {},
     pendingAction: null,
   });
+  await remove(ref(db, `publicRooms/${code}`)).catch(() => {});
 }
 
 // Només l'amfitrió: publica l'estat després de cada canvi.
