@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Analytics } from "@vercel/analytics/react";
-import { crearSala, unirSala, unirSalaPublica, escoltaSala, actualitzaSlot, iniciaPartida, publicaEstat, enviaAccio, netejaAccio } from "./multiplayer";
+import { crearSala, unirSala, unirSalaPublica, escoltaSala, actualitzaSlot, iniciaPartida, publicaEstat, enviaAccio, netejaAccio, abandonaSala } from "./multiplayer";
 
 // ══ Constants ═══════════════════════════════════════════════════════════════
 const PALS = ["Ors", "Copes", "Espases", "Bastos"];
@@ -1008,15 +1008,32 @@ function SlotOption({ label, active, onClick }) {
   );
 }
 
-function SlotRow({ i, slot, mySlot, isHost, expanded, onToggleExpand, onSetSlot }) {
+// Mateixa icona que l'estat de la fila, amb un text petit a sota per aclarir-la.
+function IconOption({ icon, label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+      padding: "8px 16px", borderRadius: 10,
+      border: `1px solid ${active ? "#c9a84c" : "#2a2a2a"}`,
+      background: active ? "rgba(201,168,76,0.15)" : "#161616", cursor: "pointer",
+    }}>
+      <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 10, color: active ? "#c9a84c" : "#888" }}>{label}</span>
+    </button>
+  );
+}
+
+const SLOT_ICON = { human: "👤", open: "👤", bot: "🤖", closed: "🔒" };
+
+function SlotRow({ i, slot, mySlot, isHost, expanded, pickingBot, onToggle, onPickType, onPickDiff }) {
   const s = slot || { type: 'open' };
   const isMe = i === mySlot;
-  const botLabel = BOT_TYPES.find(b => b.id === s.botType)?.label || 'Heurístic';
-  // L'etiqueta només reflecteix l'estat actual (mai una acció a fer).
-  const label = s.type === 'human' ? s.name
-    : s.type === 'bot' ? `🤖 Bot · ${botLabel}`
+  // La icona només indica el tipus. El detall (nom/dificultat/res) va a part.
+  const icon = SLOT_ICON[s.type] || "👤";
+  const detail = s.type === 'human' ? s.name
+    : s.type === 'bot' ? (BOT_TYPES.find(b => b.id === s.botType)?.diff || 'Mitjà')
     : s.type === 'closed' ? 'Tancat'
-    : 'Obert';
+    : 'Esperant jugador…';
   const editable = isHost && s.type !== 'human';
   return (
     <div>
@@ -1025,13 +1042,17 @@ function SlotRow({ i, slot, mySlot, isHost, expanded, onToggleExpand, onSetSlot 
         padding: "9px 14px", borderRadius: 10,
         border: `1px solid ${s.type === 'human' ? "#c9a84c44" : "#2a2a2a"}`,
         background: s.type === 'human' ? "rgba(201,168,76,0.08)" : "transparent",
+        opacity: s.type === 'open' || s.type === 'closed' ? 0.65 : 1,
       }}>
-        <span style={{ color: s.type === 'closed' ? "#444" : s.type === 'open' ? "#777" : "white", fontSize: 14 }}>
-          {label}{isMe ? " · Tu" : ""}
+        <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <span style={{ fontSize: 17 }}>{icon}</span>
+          <span style={{ color: s.type === 'closed' ? "#666" : "white", fontSize: 14 }}>
+            {detail}{isMe ? " · Tu" : ""}
+          </span>
         </span>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {editable && (
-            <button onClick={() => onToggleExpand(i)} style={{
+            <button onClick={() => onToggle(i)} style={{
               padding: "5px 10px", borderRadius: 8, border: "1px solid #333",
               background: expanded ? "rgba(201,168,76,0.12)" : "transparent",
               color: expanded ? "#c9a84c" : "#888", fontSize: 12, cursor: "pointer",
@@ -1040,14 +1061,24 @@ function SlotRow({ i, slot, mySlot, isHost, expanded, onToggleExpand, onSetSlot 
           {s.type === 'human' && <span style={{ color: "#4CAF50", fontSize: 11 }}>●</span>}
         </div>
       </div>
-      {expanded && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 4px 2px" }}>
-          <SlotOption label="Obert" active={s.type === 'open'} onClick={() => onSetSlot(i, { type: 'open' })} />
+
+      {expanded && !pickingBot && (
+        <div style={{ display: "flex", gap: 8, padding: "8px 4px 2px" }}>
+          <IconOption icon="👤" label="Humà" active={s.type === 'open'} onClick={() => onPickType(i, 'open')} />
+          <IconOption icon="🤖" label="Bot" active={s.type === 'bot'} onClick={() => onPickType(i, 'bot')} />
+          <IconOption icon="🔒" label="Tancat" active={s.type === 'closed'} onClick={() => onPickType(i, 'closed')} />
+        </div>
+      )}
+      {expanded && pickingBot && (
+        <div style={{ display: "flex", gap: 6, padding: "8px 4px 2px", alignItems: "center" }}>
+          <button onClick={() => onPickType(i, null)} style={{
+            padding: "6px 8px", borderRadius: 8, border: "1px solid #2a2a2a",
+            background: "#161616", color: "#666", fontSize: 12, cursor: "pointer",
+          }}>←</button>
           {BOT_TYPES.map(bt => (
-            <SlotOption key={bt.id} label={`🤖 ${bt.label}`} active={s.type === 'bot' && s.botType === bt.id}
-              onClick={() => onSetSlot(i, { type: 'bot', botType: bt.id })} />
+            <SlotOption key={bt.id} label={bt.diff} active={s.type === 'bot' && s.botType === bt.id}
+              onClick={() => onPickDiff(i, bt.id)} />
           ))}
-          <SlotOption label="Tancat" active={s.type === 'closed'} onClick={() => onSetSlot(i, { type: 'closed' })} />
         </div>
       )}
     </div>
@@ -1056,10 +1087,27 @@ function SlotRow({ i, slot, mySlot, isHost, expanded, onToggleExpand, onSetSlot 
 
 function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, busy }) {
   const [expandedSlot, setExpandedSlot] = useState(null);
+  const [pickingBot, setPickingBot] = useState(false);
   const slots = Array.from({ length: 5 }, (_, i) => room?.slots?.[i] || { type: 'open' });
   const activeCount = slots.filter(s => s.type !== 'closed').length;
   const canStart = activeCount >= 3;
-  const applySlot = (i, slotObj) => { onSetSlot(i, slotObj); setExpandedSlot(null); };
+
+  const onToggle = (i) => {
+    setExpandedSlot(cur => cur === i ? null : i);
+    setPickingBot(false);
+  };
+  // type === 'bot' obre el submenú de dificultat en lloc de tancar; type === null torna al menú principal.
+  const onPickType = (i, type) => {
+    if (type === 'bot') { setPickingBot(true); return; }
+    if (type === null) { setPickingBot(false); return; }
+    onSetSlot(i, { type });
+    setExpandedSlot(null); setPickingBot(false);
+  };
+  const onPickDiff = (i, botType) => {
+    onSetSlot(i, { type: 'bot', botType });
+    setExpandedSlot(null); setPickingBot(false);
+  };
+
   return (
     <ShellCard>
       <BackHeader onBack={onBack} title="Sala d'espera" />
@@ -1070,9 +1118,8 @@ function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, b
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
         {slots.map((s, i) => (
           <SlotRow key={i} i={i} slot={s} mySlot={mySlot} isHost={isHost}
-            expanded={expandedSlot === i}
-            onToggleExpand={(idx) => setExpandedSlot(cur => cur === idx ? null : idx)}
-            onSetSlot={applySlot} />
+            expanded={expandedSlot === i} pickingBot={expandedSlot === i && pickingBot}
+            onToggle={onToggle} onPickType={onPickType} onPickDiff={onPickDiff} />
         ))}
       </div>
 
@@ -1507,6 +1554,7 @@ export default function App() {
   const [mpError, setMpError] = useState(null);
 
   const resetAll = () => {
+    if (roomCode) abandonaSala(roomCode, isHost, mySlot);
     setGame(null); setView('menu');
     setOnline(false); setIsHost(false); setRoomCode(null);
     setMyUid(null); setMySlot(null); setMySeat(null); setRoom(null); setMpError(null);

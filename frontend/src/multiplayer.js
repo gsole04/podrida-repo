@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getDatabase, ref, set, get, update, remove, onValue, off } from "firebase/database";
+import { getDatabase, ref, set, get, update, remove, onValue, off, onDisconnect } from "firebase/database";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { firebaseConfig } from "./firebase";
 
@@ -52,6 +52,11 @@ export async function crearSala({ nom, public: isPublic, rules }) {
     createdAt: Date.now(),
   });
   if (isPublic) await set(ref(db, `publicRooms/${code}`), true);
+
+  // Si l'amfitrió es desconnecta (tanca la pestanya, perd connexió...) Firebase esborra la sala sola.
+  onDisconnect(ref(db, `rooms/${code}`)).remove();
+  if (isPublic) onDisconnect(ref(db, `publicRooms/${code}`)).remove();
+
   return { code, mySlot: 0, uid };
 }
 
@@ -66,6 +71,10 @@ export async function unirSala(code, nom) {
   for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") { seat = i; break; }
   if (seat === -1) throw new Error("La sala és plena");
   await set(ref(db, `rooms/${code}/slots/${seat}`), { type: "human", name: nom, uid });
+
+  // Si el convidat es desconnecta, el seient torna a quedar obert per algú altre.
+  onDisconnect(ref(db, `rooms/${code}/slots/${seat}`)).set({ type: "open" });
+
   return { code, mySlot: seat, uid };
 }
 
@@ -105,6 +114,18 @@ export async function iniciaPartida(code, gameState, seatAssignment) {
 // Només l'amfitrió: publica l'estat després de cada canvi.
 export function publicaEstat(code, gameState) {
   return set(ref(db, `rooms/${code}/state`), netejaJSON(gameState));
+}
+
+// Neteja explícita en tornar enrere o acabar: l'amfitrió esborra la sala sencera;
+// un convidat només allibera el seu seient.
+export function abandonaSala(code, isHost, mySlot) {
+  if (!code) return;
+  if (isHost) {
+    remove(ref(db, `rooms/${code}`)).catch(() => {});
+    remove(ref(db, `publicRooms/${code}`)).catch(() => {});
+  } else if (mySlot != null) {
+    set(ref(db, `rooms/${code}/slots/${mySlot}`), { type: "open" }).catch(() => {});
+  }
 }
 
 // Qualsevol jugador: envia la seva jugada perquè l'amfitrió l'apliqui.
