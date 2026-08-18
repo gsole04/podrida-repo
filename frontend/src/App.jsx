@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { crearSala, unirSala, unirSalaPublica, escoltaSala, actualitzaSlot, iniciaPartida, publicaEstat, enviaAccio, netejaAccio } from "./multiplayer";
 
 // ══ Constants ═══════════════════════════════════════════════════════════════
@@ -996,50 +997,69 @@ function JoinRoomScreen({ onJoinCode, onJoinPublic, onBack, busy, error }) {
   );
 }
 
-const DIFF_ORDER = ['random', 'heuristic', 'ismcts'];
+function SlotOption({ label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "6px 10px", borderRadius: 8,
+      border: `1px solid ${active ? "#c9a84c" : "#2a2a2a"}`,
+      background: active ? "rgba(201,168,76,0.15)" : "#161616",
+      color: active ? "#c9a84c" : "#999", fontSize: 12, cursor: "pointer",
+    }}>{label}</button>
+  );
+}
 
-function SlotRow({ i, slot, mySlot, isHost, onCycleType, onCycleDiff }) {
+function SlotRow({ i, slot, mySlot, isHost, expanded, onToggleExpand, onSetSlot }) {
   const s = slot || { type: 'open' };
   const isMe = i === mySlot;
   const botLabel = BOT_TYPES.find(b => b.id === s.botType)?.label || 'Heurístic';
+  // L'etiqueta només reflecteix l'estat actual (mai una acció a fer).
   const label = s.type === 'human' ? s.name
     : s.type === 'bot' ? `🤖 Bot · ${botLabel}`
     : s.type === 'closed' ? 'Tancat'
     : 'Obert';
   const editable = isHost && s.type !== 'human';
-  const miniBtn = {
-    padding: "5px 9px", borderRadius: 8, border: "1px solid #333",
-    background: "transparent", color: "#aaa", fontSize: 12, cursor: "pointer",
-  };
   return (
-    <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "9px 14px", borderRadius: 10,
-      border: `1px solid ${s.type === 'human' ? "#c9a84c44" : "#2a2a2a"}`,
-      background: s.type === 'human' ? "rgba(201,168,76,0.08)" : "transparent",
-    }}>
-      <span style={{ color: s.type === 'closed' ? "#444" : s.type === 'open' ? "#777" : "white", fontSize: 14 }}>
-        {label}{isMe ? " · Tu" : ""}
-      </span>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        {editable && s.type === 'bot' && (
-          <button onClick={() => onCycleDiff(i)} style={miniBtn} title="Canvia dificultat">🔄</button>
-        )}
-        {editable && (
-          <button onClick={() => onCycleType(i)} style={miniBtn}>
-            {s.type === 'open' ? '🤖' : s.type === 'bot' ? '✕' : '↺'}
-          </button>
-        )}
-        {s.type === 'human' && <span style={{ color: "#4CAF50", fontSize: 11 }}>●</span>}
+    <div>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "9px 14px", borderRadius: 10,
+        border: `1px solid ${s.type === 'human' ? "#c9a84c44" : "#2a2a2a"}`,
+        background: s.type === 'human' ? "rgba(201,168,76,0.08)" : "transparent",
+      }}>
+        <span style={{ color: s.type === 'closed' ? "#444" : s.type === 'open' ? "#777" : "white", fontSize: 14 }}>
+          {label}{isMe ? " · Tu" : ""}
+        </span>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {editable && (
+            <button onClick={() => onToggleExpand(i)} style={{
+              padding: "5px 10px", borderRadius: 8, border: "1px solid #333",
+              background: expanded ? "rgba(201,168,76,0.12)" : "transparent",
+              color: expanded ? "#c9a84c" : "#888", fontSize: 12, cursor: "pointer",
+            }}>{expanded ? "Fet" : "Canvia"}</button>
+          )}
+          {s.type === 'human' && <span style={{ color: "#4CAF50", fontSize: 11 }}>●</span>}
+        </div>
       </div>
+      {expanded && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 4px 2px" }}>
+          <SlotOption label="Obert" active={s.type === 'open'} onClick={() => onSetSlot(i, { type: 'open' })} />
+          {BOT_TYPES.map(bt => (
+            <SlotOption key={bt.id} label={`🤖 ${bt.label}`} active={s.type === 'bot' && s.botType === bt.id}
+              onClick={() => onSetSlot(i, { type: 'bot', botType: bt.id })} />
+          ))}
+          <SlotOption label="Tancat" active={s.type === 'closed'} onClick={() => onSetSlot(i, { type: 'closed' })} />
+        </div>
+      )}
     </div>
   );
 }
 
-function LobbyScreen({ code, room, isHost, mySlot, onCycleType, onCycleDiff, onStart, onBack, busy }) {
+function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, busy }) {
+  const [expandedSlot, setExpandedSlot] = useState(null);
   const slots = Array.from({ length: 5 }, (_, i) => room?.slots?.[i] || { type: 'open' });
   const activeCount = slots.filter(s => s.type !== 'closed').length;
   const canStart = activeCount >= 3;
+  const applySlot = (i, slotObj) => { onSetSlot(i, slotObj); setExpandedSlot(null); };
   return (
     <ShellCard>
       <BackHeader onBack={onBack} title="Sala d'espera" />
@@ -1049,7 +1069,10 @@ function LobbyScreen({ code, room, isHost, mySlot, onCycleType, onCycleDiff, onS
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
         {slots.map((s, i) => (
-          <SlotRow key={i} i={i} slot={s} mySlot={mySlot} isHost={isHost} onCycleType={onCycleType} onCycleDiff={onCycleDiff} />
+          <SlotRow key={i} i={i} slot={s} mySlot={mySlot} isHost={isHost}
+            expanded={expandedSlot === i}
+            onToggleExpand={(idx) => setExpandedSlot(cur => cur === idx ? null : idx)}
+            onSetSlot={applySlot} />
         ))}
       </div>
 
@@ -1519,17 +1542,10 @@ export default function App() {
     setMpBusy(false);
   };
 
-  // Nomes l'amfitrió pot editar seients que encara no té ningú a dins.
-  const cycleSlotType = (i) => {
-    const cur = (room?.slots?.[i] || { type: 'open' }).type;
-    if (cur === 'human') return;
-    const next = cur === 'open' ? 'bot' : cur === 'bot' ? 'closed' : 'open';
-    actualitzaSlot(roomCode, i, next === 'bot' ? { type: 'bot', botType: 'heuristic' } : { type: next });
-  };
-  const cycleSlotDiff = (i) => {
-    const cur = room?.slots?.[i]?.botType || 'heuristic';
-    const next = DIFF_ORDER[(DIFF_ORDER.indexOf(cur) + 1) % DIFF_ORDER.length];
-    actualitzaSlot(roomCode, i, { type: 'bot', botType: next });
+  // Nomes l'amfitrió pot editar seients que encara no té ningú a dins (validat també a Firebase).
+  const handleSetSlot = (i, slotObj) => {
+    if ((room?.slots?.[i] || { type: 'open' }).type === 'human') return;
+    actualitzaSlot(roomCode, i, slotObj);
   };
 
   const handleStartOnline = () => {
@@ -1743,27 +1759,29 @@ export default function App() {
     }, 0));
   };
 
+  let screen;
   if (!game) {
-    if (view === 'menu') return <MenuScreen onPlay={() => setView('configure')} onTutorial={handleTutorialStart} onMultiplayer={() => setView('mp-menu')} />;
-    if (view === 'mp-menu') return <MultiplayerMenuScreen onCreate={() => setView('mp-create')} onJoin={() => setView('mp-join')} onBack={() => setView('menu')} />;
-    if (view === 'mp-create') return <CreateRoomScreen onCreate={handleCreateRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
-    if (view === 'mp-join') return <JoinRoomScreen onJoinCode={handleJoinRoom} onJoinPublic={handleJoinPublic} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
-    if (view === 'mp-lobby') return <LobbyScreen code={roomCode} room={room} isHost={isHost} mySlot={mySlot} onCycleType={cycleSlotType} onCycleDiff={cycleSlotDiff} onStart={handleStartOnline} onBack={resetAll} busy={mpBusy} />;
-    return <SetupScreen onStart={handleStart} onBack={() => setView('menu')} />;
+    if (view === 'menu') screen = <MenuScreen onPlay={() => setView('configure')} onTutorial={handleTutorialStart} onMultiplayer={() => setView('mp-menu')} />;
+    else if (view === 'mp-menu') screen = <MultiplayerMenuScreen onCreate={() => setView('mp-create')} onJoin={() => setView('mp-join')} onBack={() => setView('menu')} />;
+    else if (view === 'mp-create') screen = <CreateRoomScreen onCreate={handleCreateRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
+    else if (view === 'mp-join') screen = <JoinRoomScreen onJoinCode={handleJoinRoom} onJoinPublic={handleJoinPublic} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
+    else if (view === 'mp-lobby') screen = <LobbyScreen code={roomCode} room={room} isHost={isHost} mySlot={mySlot} onSetSlot={handleSetSlot} onStart={handleStartOnline} onBack={resetAll} busy={mpBusy} />;
+    else screen = <SetupScreen onStart={handleStart} onBack={() => setView('menu')} />;
+  } else {
+    const onlineHandlers = online ? {
+      mySeat,
+      onBid: (bid) => isHost
+        ? setGame(g => doBid(g, bid))
+        : enviaAccio(roomCode, { type: 'bid', seat: mySeat, bid }),
+      onPlay: (carta) => isHost
+        ? setGame(g => doPlay(g, carta))
+        : enviaAccio(roomCode, { type: 'play', seat: mySeat, carta }),
+      onNextRound: () => isHost
+        ? setGame(g => setupRound({ ...g, roundIdx: g.roundIdx + 1, startIdx: (g.startIdx + 1) % g.players.length }))
+        : enviaAccio(roomCode, { type: 'nextRound', seat: mySeat }),
+    } : {};
+    screen = <GameScreen game={game} setGame={setGame} onRestart={resetAll} {...onlineHandlers} />;
   }
 
-  const onlineHandlers = online ? {
-    mySeat,
-    onBid: (bid) => isHost
-      ? setGame(g => doBid(g, bid))
-      : enviaAccio(roomCode, { type: 'bid', seat: mySeat, bid }),
-    onPlay: (carta) => isHost
-      ? setGame(g => doPlay(g, carta))
-      : enviaAccio(roomCode, { type: 'play', seat: mySeat, carta }),
-    onNextRound: () => isHost
-      ? setGame(g => setupRound({ ...g, roundIdx: g.roundIdx + 1, startIdx: (g.startIdx + 1) % g.players.length }))
-      : enviaAccio(roomCode, { type: 'nextRound', seat: mySeat }),
-  } : {};
-
-  return <GameScreen game={game} setGame={setGame} onRestart={resetAll} {...onlineHandlers} />;
+  return <>{screen}<Analytics /></>;
 }
