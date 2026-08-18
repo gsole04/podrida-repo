@@ -1177,7 +1177,7 @@ function RoundEndOverlay({ game, onNext }) {
 }
 
 // ══ Game Screen ════════════════════════════════════════════════════════════
-function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRound }) {
+function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRound, online }) {
   const { players, scores, phase, trump, trumpCard, bids, taken, trick, rounds, roundIdx, hands, curBidder, curPlayer, selected, trickWinner, startIdx, rules = {} } = game;
   const isRondaIndia = rules.rondesIndia && roundIdx === rounds.length - 1;
   const n = players.length;
@@ -1289,6 +1289,19 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
   const isHumanTurn = phase === PHASE.PLAY && curPlayer === humanIdx;
   const isHumanBidding = phase === PHASE.BID && curBidder === humanIdx;
 
+  // Comptador de torn (només en línia): purament visual, cadascú el calcula en local
+  // a partir de quan ha vist canviar el torn; qui de veritat el fa complir és l'amfitrió.
+  const actingIdx = phase === PHASE.BID ? curBidder : phase === PHASE.PLAY ? curPlayer : null;
+  const showTimer = online && actingIdx !== null && players[actingIdx]?.isHuman;
+  const [secondsLeft, setSecondsLeft] = useState(30);
+  useEffect(() => {
+    if (!showTimer) return;
+    setSecondsLeft(30);
+    const id = setInterval(() => setSecondsLeft(s => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [showTimer, phase, curBidder, curPlayer]);
+  const urgent = showTimer && secondsLeft <= 10;
+
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% 40%, #1a472a 0%, #0a1f10 100%)", display: "flex", flexDirection: "column", fontFamily: "sans-serif" }}>
       {game.isTutorial && (
@@ -1296,6 +1309,14 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
           @keyframes tutForcedPulse {
             0%, 100% { box-shadow: 0 0 8px #FFD70066; }
             50%      { box-shadow: 0 0 18px #FFD700dd; }
+          }
+        `}</style>
+      )}
+      {urgent && (
+        <style>{`
+          @keyframes turnPulse {
+            0%, 100% { box-shadow: 0 0 6px #ff525266; transform: scale(1); }
+            50%      { box-shadow: 0 0 16px #ff5252cc; transform: scale(1.03); }
           }
         `}</style>
       )}
@@ -1320,6 +1341,20 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
           </div>
         )}
       </div>
+
+      {showTimer && (
+        <div style={{
+          textAlign: "center", padding: urgent ? "7px 0" : "3px 0",
+          fontSize: urgent ? 15 : 11, fontWeight: urgent ? "bold" : "normal",
+          color: urgent ? "#ff5252" : "#666",
+          background: urgent ? "rgba(255,82,82,0.14)" : "transparent",
+          borderRadius: urgent ? 8 : 0, margin: urgent ? "0 10px" : 0,
+          animation: urgent ? "turnPulse 1s ease-in-out infinite" : "none",
+          transition: "font-size 0.2s, color 0.2s",
+        }}>
+          ⏱ {actingIdx === humanIdx ? "Et queden" : `${players[actingIdx]?.name}:`} {secondsLeft}s
+        </div>
+      )}
 
       {/* Score bar */}
       <div style={{ display: "flex", gap: 5, padding: "6px 10px", background: "rgba(0,0,0,0.2)" }}>
@@ -1659,6 +1694,56 @@ export default function App() {
     publicaEstat(roomCode, game);
   }, [game, online, isHost, roomCode]);
 
+  // ── Temporitzador de torn (només en línia) ──────────────────────────────
+  // Si un jugador humà no reacciona en 30s (es penja, es desconnecta, o
+  // simplement no decideix), l'amfitrió juga per ell A L'ATZAR (no amb la IA
+  // heurística) perquè mai surti a compte deixar que "algú més llest" tiri per tu.
+  const TURN_TIMEOUT_MS = 30000;
+  const turnDeadlineRef = useRef(null);
+
+  useEffect(() => {
+    if (!online || !isHost || !game) { turnDeadlineRef.current = null; return; }
+    const { phase, curBidder, curPlayer, players } = game;
+    const esperantHuma =
+      (phase === PHASE.BID && players[curBidder]?.isHuman) ||
+      (phase === PHASE.PLAY && players[curPlayer]?.isHuman);
+    turnDeadlineRef.current = esperantHuma ? Date.now() + TURN_TIMEOUT_MS : null;
+  }, [online, isHost, game?.phase, game?.curBidder, game?.curPlayer]);
+
+  useEffect(() => {
+    if (!online || !isHost) return;
+    const id = setInterval(() => {
+      if (!turnDeadlineRef.current || Date.now() < turnDeadlineRef.current) return;
+      turnDeadlineRef.current = null;
+      setGame(g => {
+        if (!g) return g;
+        const { phase, curBidder, curPlayer, players } = g;
+        if (phase === PHASE.BID && players[curBidder]?.isHuman) {
+          const { rounds, roundIdx, bids: curBids, rules: r = {} } = g;
+          const nC = rounds[roundIdx];
+          const bidOrder = Array.from({ length: g.players.length }, (_, i) => (g.startIdx + i) % g.players.length);
+          const isLast = bidOrder[bidOrder.length - 1] === g.curBidder;
+          const sumJa = Object.values(curBids).reduce((a, b) => a + b, 0);
+          const prohibit = r.prohibitQuadrar && isLast ? (nC - sumJa) : -1;
+          let bid = Math.floor(Math.random() * (nC + 1));
+          if (bid === prohibit) bid = prohibit > 0 ? prohibit - 1 : prohibit + 1;
+          bid = Math.max(0, Math.min(bid, nC));
+          return doBid(g, bid);
+        }
+        if (phase === PHASE.PLAY && players[curPlayer]?.isHuman) {
+          const { curPlayer: pi, hands: h, trump: t, trick: tr } = g;
+          const palObert = tr.length ? tr[0].carta.pal : null;
+          const millor = millorATaula(tr, t);
+          const llegals = jugadesLegals(h[pi], palObert, millor, t);
+          const carta = llegals[Math.floor(Math.random() * llegals.length)];
+          return doPlay(g, carta);
+        }
+        return g;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [online, isHost]);
+
   useEffect(() => {
     if (!game || busy) return;
     if (online && !isHost) return; // els convidats no executen el motor, només en reben l'estat
@@ -1818,6 +1903,7 @@ export default function App() {
   } else {
     const onlineHandlers = online ? {
       mySeat,
+      online: true,
       onBid: (bid) => isHost
         ? setGame(g => doBid(g, bid))
         : enviaAccio(roomCode, { type: 'bid', seat: mySeat, bid }),
