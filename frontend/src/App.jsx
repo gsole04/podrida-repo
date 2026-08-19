@@ -1,6 +1,36 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { crearSala, unirSala, unirSalaPublica, escoltaSala, actualitzaSlot, iniciaPartida, publicaEstat, enviaAccio, netejaAccio, abandonaSala } from "./multiplayer";
+
+// Si qualsevol pantalla peta en renderitzar, mostra l'error en lloc d'una
+// pàgina en blanc. Útil sobretot en línia, on un client pot rebre un estat
+// inesperat via Firebase.
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error("Error a l'app:", error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#0a1f10", color: "white", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", fontFamily: "sans-serif" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+          <p style={{ color: "#c9a84c", marginBottom: 8, fontFamily: "Georgia,serif" }}>S'ha produït un error</p>
+          <p style={{ color: "#999", fontSize: 12, marginBottom: 4, maxWidth: 320, wordBreak: "break-word" }}>
+            {String(this.state.error?.message || this.state.error)}
+          </p>
+          <p style={{ color: "#555", fontSize: 10, marginBottom: 20, maxWidth: 320, wordBreak: "break-word" }}>
+            {this.state.error?.stack?.split("\n").slice(0, 3).join(" · ")}
+          </p>
+          <button onClick={() => window.location.reload()} style={{
+            padding: "10px 20px", borderRadius: 10, border: "1px solid #c9a84c",
+            background: "rgba(201,168,76,0.1)", color: "#c9a84c", fontSize: 14, cursor: "pointer",
+          }}>Recarrega l'app</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ══ Constants ═══════════════════════════════════════════════════════════════
 const PALS = ["Ors", "Copes", "Espases", "Bastos"];
@@ -1927,5 +1957,5 @@ export default function App() {
     screen = <GameScreen game={game} setGame={setGame} onRestart={resetAll} {...onlineHandlers} />;
   }
 
-  return <>{screen}<Analytics /></>;
+  return <ErrorBoundary>{screen}<Analytics /></ErrorBoundary>;
 }
