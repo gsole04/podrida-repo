@@ -1669,7 +1669,17 @@ export default function App() {
       if (!isHost && data.started && data.state) {
         const seat = data.seatAssignment?.[myUid];
         if (seat != null) setMySeat(seat);
-        setGame(data.state);
+        // Firebase no desa objectes/arrays buits: si eren {} o [] en escriure'ls,
+        // aquí arriben com a undefined. Els reomplim amb el buit esperat.
+        const st = data.state;
+        setGame({
+          ...st,
+          bids: st.bids || {},
+          taken: st.taken || {},
+          trick: st.trick || [],
+          buits: st.buits || {},
+          cartesJugades: st.cartesJugades || [],
+        });
       }
       if (isHost && data.pendingAction) {
         setGame(g => {
