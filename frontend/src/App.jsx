@@ -529,6 +529,30 @@ function construeixObsRL(state, pi) {
 }
 
 // ══ State Transitions ═════════════════════════════════════════════════════
+// Firebase Realtime Database no desa mai `null` ni objectes/arrays buits
+// ({}/[]) — a qualsevol nivell. En lloc d'aparèixer buits, aquests camps
+// simplement no existeixen quan es rellegeixen. Com que el motor de joc SÍ
+// distingeix "null"/"buit" de "no existeix" (p.ex. trickWinner !== null),
+// reconstruïm aquí tots els camps que poden acabar buits durant la partida.
+function rehidrataEstat(st) {
+  const n = st.players?.length || 0;
+  const hands = {};
+  for (let i = 0; i < n; i++) hands[i] = st.hands?.[i] || [];
+  return {
+    ...st,
+    hands,
+    bids: st.bids || {},
+    taken: st.taken || {},
+    trick: st.trick || [],
+    buits: st.buits || {},
+    cartesJugades: st.cartesJugades || [],
+    trickWinner: st.trickWinner ?? null,
+    selected: st.selected ?? null,
+    roundScores: st.roundScores ?? null,
+    _nextPhase: st._nextPhase ?? null,
+  };
+}
+
 function setupRound(state) {
   if (state.isTutorial) return setupTutRound(state, state.roundIdx);
   const { players, rounds, roundIdx, startIdx } = state;
@@ -1699,17 +1723,7 @@ export default function App() {
       if (!isHost && data.started && data.state) {
         const seat = data.seatAssignment?.[myUid];
         if (seat != null) setMySeat(seat);
-        // Firebase no desa objectes/arrays buits: si eren {} o [] en escriure'ls,
-        // aquí arriben com a undefined. Els reomplim amb el buit esperat.
-        const st = data.state;
-        setGame({
-          ...st,
-          bids: st.bids || {},
-          taken: st.taken || {},
-          trick: st.trick || [],
-          buits: st.buits || {},
-          cartesJugades: st.cartesJugades || [],
-        });
+        setGame(rehidrataEstat(data.state));
       }
       if (isHost && data.pendingAction) {
         setGame(g => {
