@@ -80,6 +80,7 @@ export async function unirSala(code, nom) {
 
 // Unir-se a la primera sala pública amb un seient obert (sense codi).
 export async function unirSalaPublica(nom) {
+  await ensureAuth();
   const snap = await get(ref(db, "publicRooms"));
   const codes = snap.exists() ? Object.keys(snap.val()) : [];
   for (const code of codes) {
