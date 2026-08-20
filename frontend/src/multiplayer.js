@@ -58,26 +58,36 @@ export async function crearSala({ nom, public: isPublic, rules }) {
 export async function unirSala(code, nom) {
   const uid = await ensureAuth();
   const snap = await get(ref(db, `rooms/${code}`));
-  if (!snap.exists()) throw new Error("Sala no trobada");
+  if (!snap.exists()) throw new Error("Partida no trobada");
   const room = snap.val();
   if (room.started) throw new Error("La partida ja ha començat");
   const slots = room.slots || {};
   let seat = -1;
   for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") { seat = i; break; }
-  if (seat === -1) throw new Error("La sala és plena");
+  if (seat === -1) throw new Error("La partida és plena");
   await set(ref(db, `rooms/${code}/slots/${seat}`), { type: "human", name: nom, uid });
   return { code, mySlot: seat, uid };
 }
 
 // Unir-se a la primera sala pública amb un seient obert (sense codi).
-export async function unirSalaPublica(nom) {
+// Llista de sales públiques amb seients oberts, amb prou info per mostrar-les
+// (nom de l'amfitrió, regles actives, seients lliures) i deixar triar quina.
+export async function llistaSalesPubliques() {
   await ensureAuth();
   const snap = await get(ref(db, "publicRooms"));
   const codes = snap.exists() ? Object.keys(snap.val()) : [];
-  for (const code of codes) {
-    try { return await unirSala(code, nom); } catch (e) { /* prova la següent sala */ }
-  }
-  throw new Error("No hi ha sales públiques obertes ara mateix");
+  const rooms = await Promise.all(codes.map(async (code) => {
+    const s = await get(ref(db, `rooms/${code}`));
+    if (!s.exists()) return null;
+    const room = s.val();
+    if (room.started) return null;
+    const slots = room.slots || {};
+    let openCount = 0;
+    for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") openCount++;
+    if (openCount === 0) return null;
+    return { code, hostName: slots[0]?.name || "algú", rules: room.rules || {}, openCount };
+  }));
+  return rooms.filter(Boolean);
 }
 
 // Escolta contínua de tota la sala: seients, si ha començat, l'estat de joc i les accions pendents.
