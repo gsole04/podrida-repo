@@ -1198,7 +1198,8 @@ function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, b
   const [pickingBot, setPickingBot] = useState(false);
   const slots = Array.from({ length: 5 }, (_, i) => room?.slots?.[i] || { type: 'open' });
   const activeCount = slots.filter(s => s.type !== 'closed').length;
-  const canStart = activeCount >= 3;
+  const openCount = slots.filter(s => s.type === 'open').length;
+  const canStart = activeCount >= 3 && openCount === 0;
 
   const onToggle = (i) => {
     setExpandedSlot(cur => cur === i ? null : i);
@@ -1236,7 +1237,13 @@ function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, b
 
       {isHost ? (
         <>
-          {!canStart && <p style={{ color: "#EF9A9A", fontSize: 12, marginBottom: 8 }}>Calen almenys 3 jugadors actius (obre un seient o posa-hi un bot)</p>}
+          {!canStart && (
+            <p style={{ color: "#EF9A9A", fontSize: 12, marginBottom: 8 }}>
+              {openCount > 0
+                ? `Encara hi ha ${openCount} seient${openCount > 1 ? "s" : ""} per decidir (bot o tancat)`
+                : "Calen almenys 3 jugadors actius"}
+            </p>
+          )}
           <button disabled={busy || !canStart} onClick={onStart} style={{
             width: "100%", padding: "13px 0", borderRadius: 12,
             border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
