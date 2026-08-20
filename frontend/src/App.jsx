@@ -963,7 +963,7 @@ const textInputStyle = {
   color: "white", fontSize: 16, marginBottom: 16,
 };
 
-function MultiplayerMenuScreen({ onCreate, onJoinCode, onJoinPublic, onBack }) {
+function MultiplayerMenuScreen({ onCreate, onJoin, onBack }) {
   return (
     <ShellCard>
       <BackHeader onBack={onBack} title="Multijugador" />
@@ -971,23 +971,18 @@ function MultiplayerMenuScreen({ onCreate, onJoinCode, onJoinPublic, onBack }) {
         width: "100%", padding: "14px 0", borderRadius: 12,
         border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
         color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-      }}>Crear una sala</button>
-      <button onClick={onJoinCode} style={{
+      }}>Crear una partida</button>
+      <button onClick={onJoin} style={{
         width: "100%", padding: "14px 0", borderRadius: 12, marginTop: 12,
         border: "1px solid #2a5a8a", background: "rgba(76,131,175,0.08)",
         color: "#5a9ac9", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-      }}>🔒 Unir-me amb codi</button>
-      <button onClick={onJoinPublic} style={{
-        width: "100%", padding: "14px 0", borderRadius: 12, marginTop: 12,
-        border: "1px solid #2a5a8a", background: "rgba(76,131,175,0.08)",
-        color: "#5a9ac9", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-      }}>🌐 Sales públiques</button>
+      }}>Unir-me a una partida</button>
     </ShellCard>
   );
 }
 
-// Icona + text curt per indicar una regla activa; es reutilitza a la sala
-// d'espera i al llistat de sales públiques.
+// Icona + text curt per indicar una regla activa; es reutilitza a la partida
+// d'espera i al llistat de partides públiques.
 function RuleBadge({ icon, label }) {
   return (
     <span style={{
@@ -1003,7 +998,7 @@ function RuleBadges({ rules }) {
   if (!rules?.prohibitQuadrar && !rules?.rondesIndia) return null;
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-      {rules.prohibitQuadrar && <RuleBadge icon="🚫" label="Prohibit quadrar" />}
+      {rules.prohibitQuadrar && <RuleBadge icon="≠" label="Prohibit quadrar" />}
       {rules.rondesIndia && <RuleBadge icon="🪶" label="Ronda índia" />}
     </div>
   );
@@ -1016,7 +1011,7 @@ function CreateRoomScreen({ onCreate, onBack, busy, error }) {
   const [rondesIndia, setRondesIndia] = useState(false);
   return (
     <ShellCard>
-      <BackHeader onBack={onBack} title="Crear sala" />
+      <BackHeader onBack={onBack} title="Crear partida" />
       <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
       <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))} placeholder="Nom" style={textInputStyle} />
 
@@ -1028,7 +1023,7 @@ function CreateRoomScreen({ onCreate, onBack, busy, error }) {
 
       <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Regles especials</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
-        <Toggle value={prohibitQuadrar} onChange={setProhibitQuadrar} label="🚫 Prohibit quadrar" desc="L'últim en parlar no pot igualar el total de mans" />
+        <Toggle value={prohibitQuadrar} onChange={setProhibitQuadrar} label="≠ Prohibit quadrar" desc="L'últim en parlar no pot igualar el total de mans" />
         <Toggle value={rondesIndia} onChange={setRondesIndia} label="🪶 Última ronda índia" desc="En l'última ronda veus les cartes dels altres però no la teva" />
       </div>
 
@@ -1038,70 +1033,74 @@ function CreateRoomScreen({ onCreate, onBack, busy, error }) {
         border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
         color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
         opacity: busy || !nom.trim() ? 0.5 : 1,
-      }}>{busy ? "Creant…" : "Crear sala"}</button>
+      }}>{busy ? "Creant…" : "Crear partida"}</button>
     </ShellCard>
   );
 }
 
-function JoinRoomScreen({ onJoinCode, onBack, busy, error }) {
+// Un únic punt d'entrada per unir-se: amb codi (privada) o triant d'una
+// llista de partides públiques obertes, amb un toggle entre totes dues.
+function JoinScreen({ onJoinCode, rooms, loading, onRefresh, onBack, busy, error }) {
+  const [mode, setMode] = useState('code'); // 'code' | 'public'
   const [code, setCode] = useState("");
   const [nom, setNom] = useState("");
-  const canSubmit = nom.trim() && code.length === 4;
+  const canSubmitCode = nom.trim() && code.length === 4;
   return (
     <ShellCard>
-      <BackHeader onBack={onBack} title="Unir-me amb codi" />
-      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Codi de sala</p>
-      <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0, 4))}
-        placeholder="ABCD" style={{
-          width: "100%", boxSizing: "border-box", textAlign: "center", letterSpacing: 6,
-          padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
-          color: "#c9a84c", fontSize: 22, fontFamily: "Georgia,serif", marginBottom: 16,
-        }} />
-      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
-      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))} placeholder="Nom" style={textInputStyle} />
-      {error && <p style={{ color: "#ef5350", fontSize: 12, marginBottom: 12 }}>{error}</p>}
-      <button disabled={busy || !canSubmit} onClick={() => onJoinCode(code, nom.trim())} style={{
-        width: "100%", padding: "13px 0", borderRadius: 12,
-        border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
-        color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
-        opacity: busy || !canSubmit ? 0.5 : 1,
-      }}>{busy ? "Connectant…" : "Unir-me"}</button>
-    </ShellCard>
-  );
-}
-
-function PublicRoomsScreen({ rooms, loading, onPick, onRefresh, onBack, busy, error }) {
-  const [nom, setNom] = useState("");
-  return (
-    <ShellCard>
-      <BackHeader onBack={onBack} title="Sales públiques" />
-      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
-      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))} placeholder="Nom" style={textInputStyle} />
-
-      {loading && <p style={{ color: "#666", fontSize: 13, textAlign: "center" }}>Buscant sales…</p>}
-      {!loading && rooms.length === 0 && <p style={{ color: "#666", fontSize: 13, textAlign: "center" }}>No hi ha sales públiques obertes ara mateix.</p>}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, maxHeight: "44vh", overflowY: "auto" }}>
-        {rooms.map(r => (
-          <button key={r.code} disabled={busy || !nom.trim()} onClick={() => onPick(r.code, nom.trim())} style={{
-            textAlign: "left", padding: "10px 14px", borderRadius: 10,
-            border: "1px solid #2a2a2a", background: "#161616", color: "white", cursor: "pointer",
-            opacity: busy || !nom.trim() ? 0.6 : 1,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 14 }}>Sala de {r.hostName}</span>
-              <span style={{ fontSize: 11, color: "#5a9ac9" }}>{r.openCount} obert{r.openCount === 1 ? "" : "s"}</span>
-            </div>
-            <div style={{ marginTop: 6 }}><RuleBadges rules={r.rules} /></div>
-          </button>
-        ))}
+      <BackHeader onBack={onBack} title="Unir-me a una partida" />
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setMode('code')} style={segBtnStyle(mode === 'code')}>🔒 Amb codi</button>
+        <button onClick={() => setMode('public')} style={segBtnStyle(mode === 'public')}>🌐 Públiques</button>
       </div>
 
-      <button onClick={onRefresh} disabled={loading} style={{
-        width: "100%", padding: "9px 0", borderRadius: 10, border: "1px solid #333",
-        background: "transparent", color: "#888", fontSize: 12, cursor: "pointer", marginBottom: 8,
-      }}>🔄 Actualitza</button>
-      {error && <p style={{ color: "#ef5350", fontSize: 12 }}>{error}</p>}
+      <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>El teu nom</p>
+      <input value={nom} onChange={e => setNom(e.target.value.slice(0, 16))} placeholder="Nom" style={textInputStyle} />
+
+      {mode === 'code' && (
+        <>
+          <p style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>Codi de partida</p>
+          <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0, 4))}
+            placeholder="ABCD" style={{
+              width: "100%", boxSizing: "border-box", textAlign: "center", letterSpacing: 6,
+              padding: "12px 0", borderRadius: 10, border: "1px solid #333", background: "#111",
+              color: "#c9a84c", fontSize: 22, fontFamily: "Georgia,serif", marginBottom: 16,
+            }} />
+          {error && <p style={{ color: "#ef5350", fontSize: 12, marginBottom: 12 }}>{error}</p>}
+          <button disabled={busy || !canSubmitCode} onClick={() => onJoinCode(code, nom.trim())} style={{
+            width: "100%", padding: "13px 0", borderRadius: 12,
+            border: "1px solid #c9a84c", background: "rgba(201,168,76,0.1)",
+            color: "#c9a84c", fontSize: 16, cursor: "pointer", fontFamily: "Georgia,serif",
+            opacity: busy || !canSubmitCode ? 0.5 : 1,
+          }}>{busy ? "Connectant…" : "Unir-me"}</button>
+        </>
+      )}
+
+      {mode === 'public' && (
+        <>
+          {loading && <p style={{ color: "#666", fontSize: 13, textAlign: "center" }}>Buscant partides…</p>}
+          {!loading && rooms.length === 0 && <p style={{ color: "#666", fontSize: 13, textAlign: "center" }}>No hi ha partides públiques obertes ara mateix.</p>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, maxHeight: "40vh", overflowY: "auto" }}>
+            {rooms.map(r => (
+              <button key={r.code} disabled={busy || !nom.trim()} onClick={() => onJoinCode(r.code, nom.trim())} style={{
+                textAlign: "left", padding: "10px 14px", borderRadius: 10,
+                border: "1px solid #2a2a2a", background: "#161616", color: "white", cursor: "pointer",
+                opacity: busy || !nom.trim() ? 0.6 : 1,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14 }}>Partida de {r.hostName}</span>
+                  <span style={{ fontSize: 11, color: "#5a9ac9" }}>{r.openCount} obert{r.openCount === 1 ? "" : "s"}</span>
+                </div>
+                <div style={{ marginTop: 6 }}><RuleBadges rules={r.rules} /></div>
+              </button>
+            ))}
+          </div>
+          <button onClick={onRefresh} disabled={loading} style={{
+            width: "100%", padding: "9px 0", borderRadius: 10, border: "1px solid #333",
+            background: "transparent", color: "#888", fontSize: 12, cursor: "pointer", marginBottom: 8,
+          }}>🔄 Actualitza</button>
+          {error && <p style={{ color: "#ef5350", fontSize: 12 }}>{error}</p>}
+        </>
+      )}
     </ShellCard>
   );
 }
@@ -1219,10 +1218,10 @@ function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, b
 
   return (
     <ShellCard>
-      <BackHeader onBack={onBack} title="Sala d'espera" />
-      <p style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>Codi de la sala</p>
+      <BackHeader onBack={onBack} title="Preparant la partida" />
+      <p style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>Codi de la partida</p>
       <div style={{ fontSize: 34, letterSpacing: 8, color: "#c9a84c", fontFamily: "Georgia,serif", marginBottom: 6 }}>{code}</div>
-      {room?.public && <p style={{ color: "#5a9ac9", fontSize: 11, marginBottom: 8 }}>🌐 Sala pública</p>}
+      {room?.public && <p style={{ color: "#5a9ac9", fontSize: 11, marginBottom: 8 }}>🌐 Partida pública</p>}
       <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}>
         <RuleBadges rules={room?.rules} />
       </div>
@@ -1716,7 +1715,7 @@ export default function App() {
       const { code, mySlot: slot, uid } = await crearSala({ nom, public: isPublic, rules });
       setRoomCode(code); setMyUid(uid); setMySlot(slot); setMySeat(0); setIsHost(true); setOnline(true);
       setView('mp-lobby');
-    } catch (e) { setMpError(e.message || "No s'ha pogut crear la sala"); }
+    } catch (e) { setMpError(e.message || "No s'ha pogut crear la partida"); }
     setMpBusy(false);
   };
 
@@ -1726,7 +1725,7 @@ export default function App() {
       const { mySlot: slot, uid } = await unirSala(code, nom);
       setRoomCode(code); setMyUid(uid); setMySlot(slot); setIsHost(false); setOnline(true);
       setView('mp-lobby');
-    } catch (e) { setMpError(e.message || "No s'ha pogut unir a la sala"); }
+    } catch (e) { setMpError(e.message || "No s'ha pogut unir a la partida"); }
     setMpBusy(false);
   };
 
@@ -1737,7 +1736,7 @@ export default function App() {
     setPublicRoomsLoading(false);
   };
 
-  const handleOpenPublicRooms = () => { setView('mp-public'); refreshPublicRooms(); };
+  const handleOpenJoin = () => { setView('mp-join'); refreshPublicRooms(); };
 
   // Nomes l'amfitrió pot editar seients que encara no té ningú a dins (validat també a Firebase).
   const handleSetSlot = (i, slotObj) => {
@@ -2009,10 +2008,9 @@ export default function App() {
   let screen;
   if (!game) {
     if (view === 'menu') screen = <MenuScreen onPlay={() => setView('configure')} onTutorial={handleTutorialStart} onMultiplayer={() => setView('mp-menu')} />;
-    else if (view === 'mp-menu') screen = <MultiplayerMenuScreen onCreate={() => setView('mp-create')} onJoinCode={() => setView('mp-join')} onJoinPublic={handleOpenPublicRooms} onBack={() => setView('menu')} />;
+    else if (view === 'mp-menu') screen = <MultiplayerMenuScreen onCreate={() => setView('mp-create')} onJoin={handleOpenJoin} onBack={() => setView('menu')} />;
     else if (view === 'mp-create') screen = <CreateRoomScreen onCreate={handleCreateRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
-    else if (view === 'mp-join') screen = <JoinRoomScreen onJoinCode={handleJoinRoom} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
-    else if (view === 'mp-public') screen = <PublicRoomsScreen rooms={publicRooms} loading={publicRoomsLoading} onPick={handleJoinRoom} onRefresh={refreshPublicRooms} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
+    else if (view === 'mp-join') screen = <JoinScreen onJoinCode={handleJoinRoom} rooms={publicRooms} loading={publicRoomsLoading} onRefresh={refreshPublicRooms} onBack={() => setView('mp-menu')} busy={mpBusy} error={mpError} />;
     else if (view === 'mp-lobby') screen = <LobbyScreen code={roomCode} room={room} isHost={isHost} mySlot={mySlot} onSetSlot={handleSetSlot} onStart={handleStartOnline} onBack={resetAll} busy={mpBusy} />;
     else screen = <SetupScreen onStart={handleStart} onBack={() => setView('menu')} />;
   } else {

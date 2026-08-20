@@ -58,13 +58,13 @@ export async function crearSala({ nom, public: isPublic, rules }) {
 export async function unirSala(code, nom) {
   const uid = await ensureAuth();
   const snap = await get(ref(db, `rooms/${code}`));
-  if (!snap.exists()) throw new Error("Sala no trobada");
+  if (!snap.exists()) throw new Error("Partida no trobada");
   const room = snap.val();
   if (room.started) throw new Error("La partida ja ha començat");
   const slots = room.slots || {};
   let seat = -1;
   for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") { seat = i; break; }
-  if (seat === -1) throw new Error("La sala és plena");
+  if (seat === -1) throw new Error("La partida és plena");
   await set(ref(db, `rooms/${code}/slots/${seat}`), { type: "human", name: nom, uid });
   return { code, mySlot: seat, uid };
 }
@@ -85,7 +85,7 @@ export async function llistaSalesPubliques() {
     let openCount = 0;
     for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") openCount++;
     if (openCount === 0) return null;
-    return { code, hostName: slots[0]?.name || "Sala", rules: room.rules || {}, openCount };
+    return { code, hostName: slots[0]?.name || "algú", rules: room.rules || {}, openCount };
   }));
   return rooms.filter(Boolean);
 }
