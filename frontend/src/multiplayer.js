@@ -70,14 +70,24 @@ export async function unirSala(code, nom) {
 }
 
 // Unir-se a la primera sala pública amb un seient obert (sense codi).
-export async function unirSalaPublica(nom) {
+// Llista de sales públiques amb seients oberts, amb prou info per mostrar-les
+// (nom de l'amfitrió, regles actives, seients lliures) i deixar triar quina.
+export async function llistaSalesPubliques() {
   await ensureAuth();
   const snap = await get(ref(db, "publicRooms"));
   const codes = snap.exists() ? Object.keys(snap.val()) : [];
-  for (const code of codes) {
-    try { return await unirSala(code, nom); } catch (e) { /* prova la següent sala */ }
-  }
-  throw new Error("No hi ha sales públiques obertes ara mateix");
+  const rooms = await Promise.all(codes.map(async (code) => {
+    const s = await get(ref(db, `rooms/${code}`));
+    if (!s.exists()) return null;
+    const room = s.val();
+    if (room.started) return null;
+    const slots = room.slots || {};
+    let openCount = 0;
+    for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") openCount++;
+    if (openCount === 0) return null;
+    return { code, hostName: slots[0]?.name || "Sala", rules: room.rules || {}, openCount };
+  }));
+  return rooms.filter(Boolean);
 }
 
 // Escolta contínua de tota la sala: seients, si ha començat, l'estat de joc i les accions pendents.
