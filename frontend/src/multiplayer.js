@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getDatabase, ref, set, get, update, remove, onValue, off, onDisconnect } from "firebase/database";
+import { getDatabase, ref, set, get, update, remove, onValue, off } from "firebase/database";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { firebaseConfig } from "./firebase";
 
@@ -52,11 +52,6 @@ export async function crearSala({ nom, public: isPublic, rules }) {
     createdAt: Date.now(),
   });
   if (isPublic) await set(ref(db, `publicRooms/${code}`), true);
-
-  // Si l'amfitrió es desconnecta (tanca la pestanya, perd connexió...) Firebase esborra la sala sola.
-  onDisconnect(ref(db, `rooms/${code}`)).remove();
-  if (isPublic) onDisconnect(ref(db, `publicRooms/${code}`)).remove();
-
   return { code, mySlot: 0, uid };
 }
 
@@ -71,10 +66,6 @@ export async function unirSala(code, nom) {
   for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") { seat = i; break; }
   if (seat === -1) throw new Error("La sala és plena");
   await set(ref(db, `rooms/${code}/slots/${seat}`), { type: "human", name: nom, uid });
-
-  // Si el convidat es desconnecta, el seient torna a quedar obert per algú altre.
-  onDisconnect(ref(db, `rooms/${code}/slots/${seat}`)).set({ type: "open" });
-
   return { code, mySlot: seat, uid };
 }
 
