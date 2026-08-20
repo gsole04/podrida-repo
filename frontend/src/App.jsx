@@ -1237,12 +1237,8 @@ function LobbyScreen({ code, room, isHost, mySlot, onSetSlot, onStart, onBack, b
 
       {isHost ? (
         <>
-          {!canStart && (
-            <p style={{ color: "#EF9A9A", fontSize: 12, marginBottom: 8 }}>
-              {openCount > 0
-                ? `Encara hi ha ${openCount} seient${openCount > 1 ? "s" : ""} per decidir (bot o tancat)`
-                : "Calen almenys 3 jugadors actius"}
-            </p>
+          {!canStart && openCount === 0 && (
+            <p style={{ color: "#EF9A9A", fontSize: 12, marginBottom: 8 }}>Calen almenys 3 jugadors actius</p>
           )}
           <button disabled={busy || !canStart} onClick={onStart} style={{
             width: "100%", padding: "13px 0", borderRadius: 12,
