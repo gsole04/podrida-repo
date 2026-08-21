@@ -1436,7 +1436,10 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
       )}
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", padding: "8px 12px", gap: 8, borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(0,0,0,0.3)" }}>
-        <button onClick={onRestart} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#666", cursor: "pointer", fontSize: 12 }}>↩</button>
+        <button onClick={() => {
+          if (online && !window.confirm("Vols sortir de la partida? Podràs tornar-hi amb el mateix codi.")) return;
+          onRestart();
+        }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#666", cursor: "pointer", fontSize: 12 }}>↩</button>
         <span style={{ color: "#666", fontSize: 12 }}>Ronda <b style={{ color: "#aaa" }}>{roundIdx + 1}</b>/{rounds.length}</span>
         <span style={{ color: "#555", fontSize: 12 }}>·</span>
         <span style={{ color: "#666", fontSize: 12 }}><b style={{ color: "#aaa" }}>{nC}</b> {nC > 1 ? "cartes" : "carta"}</span>
@@ -1706,7 +1709,12 @@ export default function App() {
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
 
   const resetAll = () => {
-    if (roomCode) abandonaSala(roomCode, isHost, mySlot);
+    // Si s'ha sortit enmig d'una partida encara en marxa (no acabada), no toquem
+    // res a Firebase: així es pot tornar a entrar més tard amb el mateix codi
+    // (fins i tot com a amfitrió). Només netegem a la sala d'espera o quan
+    // la partida ja ha arribat de veritat al final.
+    const midGame = online && game && game.phase !== PHASE.GAME_END;
+    if (roomCode && !midGame) abandonaSala(roomCode, isHost, mySlot);
     setGame(null); setView('menu');
     setOnline(false); setIsHost(false); setRoomCode(null);
     setMyUid(null); setMySlot(null); setMySeat(null); setRoom(null); setMpError(null);
@@ -1725,9 +1733,16 @@ export default function App() {
   const handleJoinRoom = async (code, nom) => {
     setMpBusy(true); setMpError(null);
     try {
-      const { mySlot: slot, uid } = await unirSala(code, nom);
-      setRoomCode(code); setMyUid(uid); setMySlot(slot); setIsHost(false); setOnline(true);
-      setView('mp-lobby');
+      const { mySlot: slot, uid, reconnect, isHost: wasHost, room: snapRoom } = await unirSala(code, nom);
+      setRoomCode(code); setMyUid(uid); setMySlot(slot); setIsHost(!!wasHost); setOnline(true);
+      if (reconnect && snapRoom) {
+        setRoom(snapRoom);
+        const seat = snapRoom.seatAssignment?.[uid];
+        if (seat != null) setMySeat(seat);
+        if (snapRoom.state) setGame(rehidrataEstat(snapRoom.state));
+      } else {
+        setView('mp-lobby');
+      }
     } catch (e) { setMpError(e.message || "No s'ha pogut unir a la partida"); }
     setMpBusy(false);
   };

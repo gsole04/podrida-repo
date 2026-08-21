@@ -61,13 +61,19 @@ export async function unirSala(code, nom) {
   const snap = await get(ref(db, `rooms/${code}`));
   if (!snap.exists()) throw new Error("Partida no trobada");
   const room = snap.val();
-  if (room.started) throw new Error("La partida ja ha començat");
+  if (room.started) {
+    // No és una sala d'espera nova: potser és algú tornant a una partida
+    // que ja jugava (mateix navegador, per tant mateix uid anònim).
+    const seat = room.seatAssignment?.[uid];
+    if (seat == null) throw new Error("Aquesta partida ja ha començat i no en formaves part");
+    return { code, mySlot: seat, uid, reconnect: true, isHost: uid === room.hostUid, room };
+  }
   const slots = room.slots || {};
   let seat = -1;
   for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") { seat = i; break; }
   if (seat === -1) throw new Error("La partida és plena");
   await set(ref(db, `rooms/${code}/slots/${seat}`), { type: "human", name: nom, uid });
-  return { code, mySlot: seat, uid };
+  return { code, mySlot: seat, uid, reconnect: false, isHost: false, room: null };
 }
 
 // Unir-se a la primera sala pública amb un seient obert (sense codi).
