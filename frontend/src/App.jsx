@@ -1923,8 +1923,11 @@ export default function App() {
           const isLast = bidOrder[bidOrder.length - 1] === g.curBidder;
           const sumJa = Object.values(curBids).reduce((a, b) => a + b, 0);
           const prohibit = r.prohibitQuadrar && isLast ? (nC - sumJa) : -1;
+          const isRandom = players[g.curBidder].botType === 'random';
           let bid = isISMCTS
             ? mcBidJS(g, g.curBidder, 120)
+            : isRandom
+            ? Math.floor(Math.random() * (nC + 1))
             : hCant(g.hands[g.curBidder], g.trump, nC);
           if (bid === prohibit) bid = prohibit > 0 ? prohibit - 1 : prohibit + 1;
           bid = Math.max(0, Math.min(bid, nC));
@@ -1961,8 +1964,11 @@ export default function App() {
           const palObert = tr.length ? tr[0].carta.pal : null;
           const millor = millorATaula(tr, t);
           const llegals = jugadesLegals(h[pi], palObert, millor, t);
+          const isRandom = players[pi].botType === 'random';
           const carta = isISMCTS
             ? ismctsPlayJS(g, pi, llegals, 200)
+            : isRandom
+            ? llegals[Math.floor(Math.random() * llegals.length)]
             : hJuga(h[pi], tr, t, b[pi], tk[pi], llegals);
           return doPlay(g, carta);
         });
