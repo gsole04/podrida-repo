@@ -1087,7 +1087,7 @@ function JoinScreen({ onJoinCode, rooms, loading, onRefresh, onBack, busy, error
                 opacity: busy || !nom.trim() ? 0.6 : 1,
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14 }}>Partida de {r.hostName}</span>
+                  <span style={{ fontSize: 14 }}>Partida de {r.hostName} <span style={{ color: "#555", fontSize: 11, letterSpacing: 1 }}>· {r.code}</span></span>
                   <span style={{ fontSize: 11, color: "#5a9ac9" }}>{r.openCount} obert{r.openCount === 1 ? "" : "s"}</span>
                 </div>
                 <div style={{ marginTop: 6 }}><RuleBadges rules={r.rules} /></div>
@@ -1291,7 +1291,7 @@ function RoundEndOverlay({ game, onNext }) {
 }
 
 // ══ Game Screen ════════════════════════════════════════════════════════════
-function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRound, online }) {
+function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRound, online, roomCode }) {
   const { players, scores, phase, trump, trumpCard, bids, taken, trick, rounds, roundIdx, hands, curBidder, curPlayer, selected, trickWinner, startIdx, rules = {} } = game;
   const isRondaIndia = rules.rondesIndia && roundIdx === rounds.length - 1;
   const n = players.length;
@@ -1443,6 +1443,9 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
         <span style={{ color: "#666", fontSize: 12 }}>Ronda <b style={{ color: "#aaa" }}>{roundIdx + 1}</b>/{rounds.length}</span>
         <span style={{ color: "#555", fontSize: 12 }}>·</span>
         <span style={{ color: "#666", fontSize: 12 }}><b style={{ color: "#aaa" }}>{nC}</b> {nC > 1 ? "cartes" : "carta"}</span>
+        {online && roomCode && (
+          <span style={{ color: "#555", fontSize: 11, letterSpacing: 2 }} title="Codi de la partida">{roomCode}</span>
+        )}
         {cardsDealt && (
           <div style={{
             marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
@@ -2035,6 +2038,7 @@ export default function App() {
     const onlineHandlers = online ? {
       mySeat,
       online: true,
+      roomCode,
       onBid: (bid) => isHost
         ? setGame(g => doBid(g, bid))
         : enviaAccio(roomCode, { type: 'bid', seat: mySeat, bid }),
