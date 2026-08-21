@@ -42,7 +42,8 @@ export async function crearSala({ nom, public: isPublic, rules }) {
     code = generaCodi();
   }
   const slots = { 0: { type: "human", name: nom, uid } };
-  for (let i = 1; i < 5; i++) slots[i] = { type: "open" };
+  for (let i = 1; i < 4; i++) slots[i] = { type: "open" };
+  slots[4] = { type: "closed" }; // per defecte, partida de 4 (l'amfitrió pot reobrir-lo)
   await set(ref(db, `rooms/${code}`), {
     hostUid: uid,
     public: !!isPublic,
@@ -70,17 +71,27 @@ export async function unirSala(code, nom) {
 }
 
 // Unir-se a la primera sala pública amb un seient obert (sense codi).
+// Llindar de neteja "lazy": una sala pública no començada i més vella que
+// això es considera abandonada i s'esborra just quan algú la troba en llistar.
+const SALA_CADUCADA_MS = 3 * 60 * 60 * 1000; // 3 hores
+
 // Llista de sales públiques amb seients oberts, amb prou info per mostrar-les
 // (nom de l'amfitrió, regles actives, seients lliures) i deixar triar quina.
+// De passada, neteja les que ja fa massa hores que esperen sense començar.
 export async function llistaSalesPubliques() {
   await ensureAuth();
   const snap = await get(ref(db, "publicRooms"));
   const codes = snap.exists() ? Object.keys(snap.val()) : [];
   const rooms = await Promise.all(codes.map(async (code) => {
     const s = await get(ref(db, `rooms/${code}`));
-    if (!s.exists()) return null;
+    if (!s.exists()) { await remove(ref(db, `publicRooms/${code}`)).catch(() => {}); return null; }
     const room = s.val();
     if (room.started) return null;
+    if (Date.now() - (room.createdAt || 0) > SALA_CADUCADA_MS) {
+      await remove(ref(db, `rooms/${code}`)).catch(() => {});
+      await remove(ref(db, `publicRooms/${code}`)).catch(() => {});
+      return null;
+    }
     const slots = room.slots || {};
     let openCount = 0;
     for (let i = 0; i < 5; i++) if ((slots[i] || { type: "open" }).type === "open") openCount++;

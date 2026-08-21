@@ -1511,7 +1511,7 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
                 border: (tutHighlightBids && bids[op.idx] !== undefined) ? "1px solid #FFD700" : "none",
                 animation: (tutHighlightBids && bids[op.idx] !== undefined) ? "tutForcedPulse 1.1s ease-in-out infinite" : "none",
               }}>
-                {op.idx === startIdx && <span style={{ color: "#c9a84c", marginRight: 3 }}>★</span>}
+                {op.idx === startIdx && <span title="Comença la ronda" style={{ color: "#c9a84c", marginRight: 3 }}>★</span>}
                 {op.name}
                 {bids[op.idx] !== undefined && ` (${taken[op.idx]}/${bids[op.idx]})`}
                 {phase === PHASE.BID && curBidder === op.idx && " 🤔"}
@@ -1542,7 +1542,7 @@ function GameScreen({ game, setGame, onRestart, mySeat, onBid, onPlay, onNextRou
           })}
           {trickWinner !== null && (
             <div style={{ width: "100%", textAlign: "center", color: "#c9a84c", fontSize: 12, fontWeight: "bold" }}>
-              {players[trickWinner].isHuman ? "★ Tu guanyes!" : `★ ${players[trickWinner].name} guanya!`}
+              {trickWinner === humanIdx ? "★ Tu guanyes!" : `★ ${players[trickWinner].name} guanya!`}
             </div>
           )}
         </div>
